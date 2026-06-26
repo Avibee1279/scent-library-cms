@@ -3,8 +3,27 @@
 <div class="admin-header">
   <div><h1>Website settings</h1><p>Change WhatsApp, Instagram, homepage text and delivery info.</p></div>
 </div>
-<form class="form-grid" method="post">
+<form class="form-grid" method="post" enctype="multipart/form-data">
   <label>Site name<input name="site_name" value="{{ settings.get('site_name','') }}"></label>
+  <label class="check">
+    <input type="checkbox" name="show_site_name_in_header" value="1" {% if settings.get('show_site_name_in_header','1') != '0' %}checked{% endif %}>
+    Show site name next to logo
+  </label>
+  <div class="wide logo-settings-block">
+    <label>Logo image<input type="file" name="logo_file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+    {% if settings.get('logo_url') %}
+      <div class="current-image logo-current">
+        <img src="{{ image_url(settings.get('logo_url')) }}" alt="Current logo">
+        <div>
+          <strong>Current logo</strong>
+          <small>Uploading a new logo will replace this one. The file is stored in Cloudinary when configured.</small>
+          <label class="check remove-logo-check"><input type="checkbox" name="remove_logo" value="1"> Remove logo and use text mark</label>
+        </div>
+      </div>
+    {% else %}
+      <p class="muted">No logo image uploaded yet. Recommended: transparent PNG, around 400 × 120 px.</p>
+    {% endif %}
+  </div>
   <label>Currency<input name="currency" value="{{ settings.get('currency','Rs') }}"></label>
   <label>WhatsApp number<input name="whatsapp_number" value="{{ settings.get('whatsapp_number','') }}" placeholder="2305xxxxxxx"></label>
   <label>Instagram URL<input name="instagram_url" value="{{ settings.get('instagram_url','') }}"></label>

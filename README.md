@@ -45,3 +45,19 @@ SECRET_KEY=your secret key
 
 The request basket is not an online payment cart. It lets customers collect perfumes, then submit a request to your admin panel or send the basket to WhatsApp.
 
+
+## Logo upload added
+
+This version is based on the luxury image-fit storefront and adds logo management.
+
+Admin path:
+
+`/admin/settings`
+
+New options:
+
+- Upload logo image
+- Remove current logo
+- Show/hide the site name next to the logo
+
+Recommended logo format: transparent PNG, around 400 x 120 px. The logo is uploaded to Cloudinary when Cloudinary environment variables are configured.

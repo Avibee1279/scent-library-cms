@@ -275,6 +275,30 @@ def upload_product_image(file_storage, product_name="perfume"):
     return filename
 
 
+def upload_site_asset(file_storage, asset_name="site-asset"):
+    """Upload site assets such as logos to Cloudinary, or local uploads in development."""
+    if not file_storage or not file_storage.filename:
+        return None
+
+    if not allowed_file(file_storage.filename):
+        raise ValueError("Image must be png, jpg, jpeg, webp or gif.")
+
+    if USE_CLOUDINARY:
+        result = cloudinary.uploader.upload(
+            file_storage,
+            folder="scent-library/brand",
+            public_id=f"{slugify(asset_name)}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+            overwrite=True,
+            resource_type="image",
+        )
+        return result.get("secure_url")
+
+    filename = secure_filename(file_storage.filename)
+    filename = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{filename}"
+    file_storage.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
+    return filename
+
+
 @app.context_processor
 def inject_globals():
     return {
@@ -287,6 +311,8 @@ def inject_globals():
         "business_email": setting("business_email", ""),
         "business_address": setting("business_address", "Mauritius"),
         "footer_note": setting("footer_note", "Curated scents, layering ideas and quick WhatsApp orders."),
+        "logo_url": setting("logo_url", ""),
+        "show_site_name_in_header": setting("show_site_name_in_header", "1"),
         "google_analytics_id": setting("google_analytics_id", ""),
         "quote_plus": quote_plus,
         "slugify": slugify,
@@ -348,6 +374,8 @@ def init_db():
             "delivery_text": "Delivery available in Mauritius. Payment by MCB Juice or cash on delivery depending on location.",
             "homepage_notice": "New arrivals and layering combos available this week.",
             "footer_note": "Curated scents, layering ideas and quick WhatsApp orders.",
+            "logo_url": "",
+            "show_site_name_in_header": "1",
             "google_analytics_id": "",
         }
         for key, value in defaults.items():
@@ -973,17 +1001,39 @@ def admin_settings():
     keys = [
         "site_name", "hero_title", "tagline", "whatsapp_number", "instagram_url",
         "currency", "business_email", "business_address", "delivery_text", "homepage_notice",
-        "footer_note", "google_analytics_id"
+        "footer_note", "google_analytics_id", "show_site_name_in_header"
     ]
+
+    def save_setting(db, key, value):
+        exists = db.execute("SELECT 1 FROM settings WHERE key = ?", (key,)).fetchone()
+        if exists:
+            db.execute("UPDATE settings SET value = ? WHERE key = ?", (value, key))
+        else:
+            db.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
+
     if request.method == "POST":
         db = get_db()
         for key in keys:
-            value = request.form.get(key, "").strip()
-            exists = db.execute("SELECT 1 FROM settings WHERE key = ?", (key,)).fetchone()
-            if exists:
-                db.execute("UPDATE settings SET value = ? WHERE key = ?", (value, key))
+            if key == "show_site_name_in_header":
+                value = "1" if request.form.get(key) == "1" else "0"
             else:
-                db.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
+                value = request.form.get(key, "").strip()
+            save_setting(db, key, value)
+
+        try:
+            if request.form.get("remove_logo") == "1":
+                save_setting(db, "logo_url", "")
+            else:
+                logo_file = request.files.get("logo_file")
+                if logo_file and logo_file.filename:
+                    logo_url = upload_site_asset(logo_file, "logo")
+                    if logo_url:
+                        save_setting(db, "logo_url", logo_url)
+        except ValueError as exc:
+            db.rollback()
+            flash(str(exc), "error")
+            return redirect(url_for("admin_settings"))
+
         db.commit()
         flash("Settings saved.", "success")
         return redirect(url_for("admin_settings"))
