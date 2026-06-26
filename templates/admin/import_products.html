@@ -1,0 +1,19 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+<div class="admin-header">
+  <div>
+    <h1>Import products</h1>
+    <p>Upload a CSV file to add many perfumes quickly.</p>
+  </div>
+  <a class="button secondary" href="{{ url_for('product_import_template') }}">Download template</a>
+</div>
+
+<section class="admin-panel">
+  <h2>CSV upload</h2>
+  <p class="muted">Use the template first. You can import name, brand, category, size, SKU, scent family, stock, price, notes and image URL.</p>
+  <form method="post" enctype="multipart/form-data" class="form-grid">
+    <label class="wide">CSV file<input type="file" name="csv_file" accept=".csv" required></label>
+    <div class="wide"><button class="button" type="submit">Import products</button></div>
+  </form>
+</section>
+{% endblock %}

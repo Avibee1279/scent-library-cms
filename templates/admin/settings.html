@@ -14,6 +14,8 @@
   <label class="wide">Tagline<textarea name="tagline" rows="3">{{ settings.get('tagline','') }}</textarea></label>
   <label class="wide">Homepage notice<textarea name="homepage_notice" rows="3">{{ settings.get('homepage_notice','') }}</textarea></label>
   <label class="wide">Delivery / payment text<textarea name="delivery_text" rows="4">{{ settings.get('delivery_text','') }}</textarea></label>
+  <label class="wide">Footer note<textarea name="footer_note" rows="2">{{ settings.get('footer_note','') }}</textarea></label>
+  <label class="wide">Google Analytics ID<input name="google_analytics_id" value="{{ settings.get('google_analytics_id','') }}" placeholder="G-XXXXXXXXXX"></label>
   <div class="wide"><button class="button" type="submit">Save settings</button></div>
 </form>
 {% endblock %}

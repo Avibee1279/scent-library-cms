@@ -74,6 +74,34 @@ products_table = Table(
     Column("is_featured", Integer, nullable=False, default=0),
     Column("is_active", Integer, nullable=False, default=1),
     Column("sort_order", Integer, nullable=False, default=0),
+    Column("views", Integer, nullable=False, default=0),
+    Column("whatsapp_clicks", Integer, nullable=False, default=0),
+    Column("created_at", Text, nullable=False),
+    Column("updated_at", Text, nullable=False),
+)
+
+
+product_images_table = Table(
+    "product_images", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("product_id", Integer, nullable=False),
+    Column("image_url", Text, nullable=False),
+    Column("caption", Text),
+    Column("sort_order", Integer, nullable=False, default=0),
+    Column("is_primary", Integer, nullable=False, default=0),
+    Column("created_at", Text, nullable=False),
+)
+
+banners_table = Table(
+    "banners", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("title", Text, nullable=False),
+    Column("subtitle", Text),
+    Column("image_url", Text),
+    Column("button_text", Text),
+    Column("button_link", Text),
+    Column("is_active", Integer, nullable=False, default=1),
+    Column("sort_order", Integer, nullable=False, default=0),
     Column("created_at", Text, nullable=False),
     Column("updated_at", Text, nullable=False),
 )
@@ -258,6 +286,8 @@ def inject_globals():
         "currency": setting("currency", "Rs"),
         "business_email": setting("business_email", ""),
         "business_address": setting("business_address", "Mauritius"),
+        "footer_note": setting("footer_note", "Curated scents, layering ideas and quick WhatsApp orders."),
+        "google_analytics_id": setting("google_analytics_id", ""),
         "quote_plus": quote_plus,
         "slugify": slugify,
         "image_url": image_url,
@@ -276,6 +306,8 @@ def migrate_schema():
         "scent_family": "ALTER TABLE products ADD COLUMN scent_family TEXT",
         "stock_qty": "ALTER TABLE products ADD COLUMN stock_qty INTEGER DEFAULT 0",
         "low_stock_threshold": "ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER DEFAULT 2",
+        "views": "ALTER TABLE products ADD COLUMN views INTEGER DEFAULT 0",
+        "whatsapp_clicks": "ALTER TABLE products ADD COLUMN whatsapp_clicks INTEGER DEFAULT 0",
     }
     with engine.begin() as conn:
         for col, statement in migrations.items():
@@ -315,6 +347,8 @@ def init_db():
             "business_address": "Mauritius",
             "delivery_text": "Delivery available in Mauritius. Payment by MCB Juice or cash on delivery depending on location.",
             "homepage_notice": "New arrivals and layering combos available this week.",
+            "footer_note": "Curated scents, layering ideas and quick WhatsApp orders.",
+            "google_analytics_id": "",
         }
         for key, value in defaults.items():
             exists = conn.execute(text("SELECT 1 FROM settings WHERE key = :key"), {"key": key}).fetchone()
@@ -373,6 +407,24 @@ def init_db():
                 )
 
 
+        banner_count = conn.execute(text("SELECT COUNT(*) AS c FROM banners")).mappings().fetchone()["c"]
+        if banner_count == 0:
+            conn.execute(
+                text("""
+                    INSERT INTO banners (title, subtitle, image_url, button_text, button_link, is_active, sort_order, created_at, updated_at)
+                    VALUES (:title, :subtitle, :image_url, :button_text, :button_link, 1, 1, :created_at, :updated_at)
+                """),
+                {
+                    "title": "New arrivals now available",
+                    "subtitle": "Upload banners from admin to promote perfume drops, gift sets and offers.",
+                    "image_url": "",
+                    "button_text": "View perfumes",
+                    "button_link": "#products",
+                    "created_at": now_iso(),
+                    "updated_at": now_iso(),
+                },
+            )
+
 def product_query(active_only=True):
     q = request.args.get("q", "").strip()
     category = request.args.get("category", "All")
@@ -404,6 +456,9 @@ def index():
     combos = get_db().execute(
         "SELECT * FROM combos WHERE is_active = 1 ORDER BY sort_order ASC, title ASC"
     ).fetchall()
+    banners = get_db().execute(
+        "SELECT * FROM banners WHERE is_active = 1 ORDER BY sort_order ASC, id DESC"
+    ).fetchall()
     categories = ["All", "Men", "Women", "Unisex"]
     families = ["All"] + [row["scent_family"] for row in get_db().execute("SELECT DISTINCT scent_family FROM products WHERE is_active = 1 AND COALESCE(scent_family,'') <> '' ORDER BY scent_family").fetchall()]
     return render_template(
@@ -411,6 +466,7 @@ def index():
         products=products,
         featured=featured,
         combos=combos,
+        banners=banners,
         categories=categories,
         selected_category=selected_category,
         selected_family=selected_family,
@@ -423,14 +479,18 @@ def index():
 
 @app.route("/product/<int:product_id>/<slug>")
 def product_detail(product_id, slug):
-    product = get_db().execute("SELECT * FROM products WHERE id = ? AND is_active = 1", (product_id,)).fetchone()
+    db = get_db()
+    product = db.execute("SELECT * FROM products WHERE id = ? AND is_active = 1", (product_id,)).fetchone()
     if not product:
         abort(404)
-    related = get_db().execute(
+    db.execute("UPDATE products SET views = COALESCE(views, 0) + 1 WHERE id = ?", (product_id,))
+    db.commit()
+    gallery = db.execute("SELECT * FROM product_images WHERE product_id = ? ORDER BY sort_order ASC, id ASC", (product_id,)).fetchall()
+    related = db.execute(
         "SELECT * FROM products WHERE is_active = 1 AND category = ? AND id <> ? ORDER BY is_featured DESC, sort_order ASC LIMIT 3",
         (product["category"], product_id)
     ).fetchall()
-    return render_template("product_detail.html", product=product, related=related)
+    return render_template("product_detail.html", product=product, gallery=gallery, related=related)
 
 
 @app.route("/order-request", methods=["POST"])
@@ -456,6 +516,28 @@ def order_request():
     flash("Your request has been sent. We will contact you soon.", "success")
     return redirect(url_for("index") + "#contact")
 
+
+
+@app.route("/track/whatsapp/product/<int:product_id>")
+def track_whatsapp_product(product_id):
+    product = get_db().execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
+    if not product:
+        abort(404)
+    get_db().execute("UPDATE products SET whatsapp_clicks = COALESCE(whatsapp_clicks, 0) + 1 WHERE id = ?", (product_id,))
+    get_db().commit()
+    size = product["size"] or ""
+    message = f"Hi, I am interested in {product['name']} {size}. Is it available?"
+    return redirect(f"https://wa.me/{setting('whatsapp_number', '23050000000')}?text={quote_plus(message)}")
+
+@app.route("/track/whatsapp/restock/<int:product_id>")
+def track_whatsapp_restock(product_id):
+    product = get_db().execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
+    if not product:
+        abort(404)
+    get_db().execute("UPDATE products SET whatsapp_clicks = COALESCE(whatsapp_clicks, 0) + 1 WHERE id = ?", (product_id,))
+    get_db().commit()
+    message = f"Hi, please tell me when {product['name']} is back in stock."
+    return redirect(f"https://wa.me/{setting('whatsapp_number', '23050000000')}?text={quote_plus(message)}")
 
 
 @app.route("/sitemap.xml")
@@ -514,10 +596,13 @@ def admin_dashboard():
         "orders": get_db().execute("SELECT COUNT(*) AS c FROM order_requests WHERE status = 'New'").fetchone()["c"],
         "low_stock": get_db().execute("SELECT COUNT(*) AS c FROM products WHERE is_active = 1 AND stock_qty <= low_stock_threshold").fetchone()["c"],
         "out_of_stock": get_db().execute("SELECT COUNT(*) AS c FROM products WHERE is_active = 1 AND stock_qty <= 0").fetchone()["c"],
+        "views": get_db().execute("SELECT COALESCE(SUM(views),0) AS c FROM products").fetchone()["c"],
+        "clicks": get_db().execute("SELECT COALESCE(SUM(whatsapp_clicks),0) AS c FROM products").fetchone()["c"],
     }
     recent_orders = get_db().execute("SELECT * FROM order_requests ORDER BY created_at DESC LIMIT 5").fetchall()
     low_stock = get_db().execute("SELECT * FROM products WHERE is_active = 1 AND stock_qty <= low_stock_threshold ORDER BY stock_qty ASC, name ASC LIMIT 6").fetchall()
-    return render_template("admin/dashboard.html", products=products, stats=stats, recent_orders=recent_orders, low_stock=low_stock)
+    top_products = get_db().execute("SELECT * FROM products ORDER BY COALESCE(views,0) DESC, COALESCE(whatsapp_clicks,0) DESC, name ASC LIMIT 6").fetchall()
+    return render_template("admin/dashboard.html", products=products, stats=stats, recent_orders=recent_orders, low_stock=low_stock, top_products=top_products)
 
 
 @app.route("/admin/products/new", methods=["GET", "POST"])
@@ -525,7 +610,7 @@ def admin_dashboard():
 def admin_product_new():
     if request.method == "POST":
         return save_product()
-    return render_template("admin/product_form.html", product=None, action="Add product")
+    return render_template("admin/product_form.html", product=None, gallery=[], action="Add product")
 
 
 @app.route("/admin/products/<int:product_id>/edit", methods=["GET", "POST"])
@@ -537,7 +622,8 @@ def admin_product_edit(product_id):
         return redirect(url_for("admin_dashboard"))
     if request.method == "POST":
         return save_product(product_id)
-    return render_template("admin/product_form.html", product=product, action="Edit product")
+    gallery = get_db().execute("SELECT * FROM product_images WHERE product_id = ? ORDER BY sort_order ASC, id ASC", (product_id,)).fetchall()
+    return render_template("admin/product_form.html", product=product, gallery=gallery, action="Edit product")
 
 
 def save_product(product_id=None):
@@ -598,6 +684,7 @@ def save_product(product_id=None):
     }
 
     db = get_db()
+    saved_product_id = product_id
     if product_id:
         db.execute(
             """
@@ -620,9 +707,32 @@ def save_product(product_id=None):
             """,
             {**data, "created_at": now_iso()}
         )
+        saved_product_id = db.execute("SELECT id FROM products WHERE name = ? ORDER BY id DESC LIMIT 1", (name,)).fetchone()["id"]
         flash("Product added.", "success")
+
+    # Optional gallery images. These are extra photos shown on the product detail page.
+    gallery_files = request.files.getlist("gallery_images")
+    next_sort = db.execute("SELECT COALESCE(MAX(sort_order),0) AS m FROM product_images WHERE product_id = ?", (saved_product_id,)).fetchone()["m"] or 0
+    for file_item in gallery_files:
+        if file_item and file_item.filename:
+            try:
+                gallery_url = upload_product_image(file_item, name)
+                if gallery_url:
+                    next_sort += 1
+                    db.execute(
+                        """
+                        INSERT INTO product_images (product_id, image_url, caption, sort_order, is_primary, created_at)
+                        VALUES (?, ?, ?, ?, 0, ?)
+                        """,
+                        (saved_product_id, gallery_url, request.form.get("gallery_caption", "").strip(), next_sort, now_iso())
+                    )
+                    if not image_filename:
+                        db.execute("UPDATE products SET image_filename = ? WHERE id = ?", (gallery_url, saved_product_id))
+            except Exception as exc:
+                flash(f"One gallery image could not upload: {exc}", "error")
+
     db.commit()
-    return redirect(url_for("admin_dashboard"))
+    return redirect(url_for("admin_product_edit", product_id=saved_product_id))
 
 
 @app.route("/admin/products/<int:product_id>/delete", methods=["POST"])
@@ -645,6 +755,143 @@ def export_products():
     for p in products:
         writer.writerow([p["name"], p["brand"], p["category"], p["size"], p["sku"], p["scent_family"], p["stock_qty"], p["low_stock_threshold"], p["price"], p["notes"], p["occasion"], p["is_featured"], p["is_active"]])
     return Response(output.getvalue(), mimetype="text/csv", headers={"Content-Disposition": "attachment; filename=scent-library-products.csv"})
+
+
+@app.route("/admin/products/import", methods=["GET", "POST"])
+@login_required
+def import_products():
+    if request.method == "POST":
+        file = request.files.get("csv_file")
+        if not file or not file.filename:
+            flash("Choose a CSV file first.", "error")
+            return redirect(url_for("import_products"))
+        text_stream = io.StringIO(file.stream.read().decode("utf-8-sig"))
+        reader = csv.DictReader(text_stream)
+        added = 0
+        db = get_db()
+        for row in reader:
+            name = (row.get("name") or row.get("Name") or "").strip()
+            if not name:
+                continue
+            price = float(row.get("price") or row.get("Price") or 0)
+            stock_qty = int(float(row.get("stock_qty") or row.get("Stock") or 0))
+            low_stock_threshold = int(float(row.get("low_stock_threshold") or row.get("Low Stock Threshold") or 2))
+            db.execute(
+                """
+                INSERT INTO products
+                (name, brand, category, size, sku, scent_family, stock_qty, low_stock_threshold, price, description, notes, occasion, image_filename, is_featured, is_active, sort_order, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    name,
+                    row.get("brand") or row.get("Brand") or "",
+                    row.get("category") or row.get("Category") or "Unisex",
+                    row.get("size") or row.get("Size") or "",
+                    row.get("sku") or row.get("SKU") or "",
+                    row.get("scent_family") or row.get("Scent Family") or "",
+                    stock_qty, low_stock_threshold, price,
+                    row.get("description") or row.get("Description") or "",
+                    row.get("notes") or row.get("Notes") or "",
+                    row.get("occasion") or row.get("Occasion") or "",
+                    row.get("image_url") or row.get("Image URL") or "",
+                    1 if str(row.get("featured") or row.get("Featured") or "0").lower() in ["1","yes","true"] else 0,
+                    0 if str(row.get("active") or row.get("Active") or "1").lower() in ["0","no","false"] else 1,
+                    int(float(row.get("sort_order") or row.get("Sort order") or 0)),
+                    now_iso(), now_iso(),
+                )
+            )
+            added += 1
+        db.commit()
+        flash(f"Imported {added} product(s).", "success")
+        return redirect(url_for("admin_dashboard"))
+    return render_template("admin/import_products.html")
+
+
+@app.route("/admin/products/template.csv")
+@login_required
+def product_import_template():
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["name","brand","category","size","sku","scent_family","stock_qty","low_stock_threshold","price","description","notes","occasion","image_url","featured","active","sort_order"])
+    writer.writerow(["Example Perfume","Brand","Unisex","50ml","EX-50","Fresh / Citrus",5,2,900,"Short description","citrus, musk","Daily","",1,1,1])
+    return Response(output.getvalue(), mimetype="text/csv", headers={"Content-Disposition": "attachment; filename=product-import-template.csv"})
+
+
+@app.route("/admin/product-images/<int:image_id>/delete", methods=["POST"])
+@login_required
+def admin_product_image_delete(image_id):
+    row = get_db().execute("SELECT * FROM product_images WHERE id = ?", (image_id,)).fetchone()
+    if not row:
+        flash("Image not found.", "error")
+        return redirect(url_for("admin_dashboard"))
+    product_id = row["product_id"]
+    get_db().execute("DELETE FROM product_images WHERE id = ?", (image_id,))
+    get_db().commit()
+    flash("Gallery image removed.", "success")
+    return redirect(url_for("admin_product_edit", product_id=product_id))
+
+
+@app.route("/admin/banners", methods=["GET", "POST"])
+@login_required
+def admin_banners():
+    db = get_db()
+    if request.method == "POST":
+        banner_id = request.form.get("banner_id")
+        title = request.form.get("title", "").strip()
+        if not title:
+            flash("Banner title is required.", "error")
+            return redirect(url_for("admin_banners"))
+        image_url_value = request.form.get("existing_image", "").strip()
+        file = request.files.get("image")
+        if file and file.filename:
+            image_url_value = upload_product_image(file, title)
+        data = {
+            "title": title,
+            "subtitle": request.form.get("subtitle", "").strip(),
+            "image_url": image_url_value,
+            "button_text": request.form.get("button_text", "").strip(),
+            "button_link": request.form.get("button_link", "#products").strip(),
+            "is_active": 1 if request.form.get("is_active") else 0,
+            "sort_order": int(request.form.get("sort_order") or 0),
+            "updated_at": now_iso(),
+        }
+        if banner_id:
+            db.execute("""UPDATE banners SET title=:title, subtitle=:subtitle, image_url=:image_url, button_text=:button_text, button_link=:button_link, is_active=:is_active, sort_order=:sort_order, updated_at=:updated_at WHERE id=:id""", {**data, "id": banner_id})
+            flash("Banner updated.", "success")
+        else:
+            db.execute("""INSERT INTO banners (title, subtitle, image_url, button_text, button_link, is_active, sort_order, created_at, updated_at) VALUES (:title, :subtitle, :image_url, :button_text, :button_link, :is_active, :sort_order, :created_at, :updated_at)""", {**data, "created_at": now_iso()})
+            flash("Banner added.", "success")
+        db.commit()
+        return redirect(url_for("admin_banners"))
+    banners = db.execute("SELECT * FROM banners ORDER BY sort_order ASC, id DESC").fetchall()
+    return render_template("admin/banners.html", banners=banners)
+
+
+@app.route("/admin/banners/<int:banner_id>/delete", methods=["POST"])
+@login_required
+def admin_banner_delete(banner_id):
+    get_db().execute("DELETE FROM banners WHERE id = ?", (banner_id,))
+    get_db().commit()
+    flash("Banner deleted.", "success")
+    return redirect(url_for("admin_banners"))
+
+
+@app.route("/admin/export.json")
+@login_required
+def export_backup_json():
+    import json
+    data = {
+        "products": [dict(x) for x in get_db().execute("SELECT * FROM products ORDER BY id").fetchall()],
+        "product_images": [dict(x) for x in get_db().execute("SELECT * FROM product_images ORDER BY id").fetchall()],
+        "banners": [dict(x) for x in get_db().execute("SELECT * FROM banners ORDER BY id").fetchall()],
+        "combos": [dict(x) for x in get_db().execute("SELECT * FROM combos ORDER BY id").fetchall()],
+        "order_requests": [dict(x) for x in get_db().execute("SELECT * FROM order_requests ORDER BY id").fetchall()],
+        "settings": [dict(x) for x in get_db().execute("SELECT * FROM settings ORDER BY key").fetchall()],
+        "exported_at": now_iso(),
+    }
+    return Response(json.dumps(data, indent=2), mimetype="application/json", headers={"Content-Disposition": "attachment; filename=scent-library-backup.json"})
+
+
 
 
 @app.route("/admin/orders", methods=["GET", "POST"])
@@ -725,7 +972,8 @@ def admin_combo_delete(combo_id):
 def admin_settings():
     keys = [
         "site_name", "hero_title", "tagline", "whatsapp_number", "instagram_url",
-        "currency", "business_email", "business_address", "delivery_text", "homepage_notice"
+        "currency", "business_email", "business_address", "delivery_text", "homepage_notice",
+        "footer_note", "google_analytics_id"
     ]
     if request.method == "POST":
         db = get_db()

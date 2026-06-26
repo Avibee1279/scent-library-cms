@@ -1,40 +1,29 @@
-# The Scent Library CMS - Business Upgrade
+# The Scent Library CMS - Growth Upgrade
 
-This is the upgraded CMS for The Scent Library.
+This version is the next business upgrade of the perfume CMS.
 
 ## Stack
 
-- Flask / Python backend
-- PostgreSQL using `DATABASE_URL` on Render/Neon
+- Flask / Python
+- PostgreSQL through `DATABASE_URL` on Render/Neon
 - SQLite fallback for local testing
-- Cloudinary product photo uploads
-- Render deployment ready
+- Cloudinary for permanent product and banner images
+- Render for hosting
 
-## New in this version
+## New features in this upgrade
 
-- Stock quantity per product
-- Low-stock alerts on admin dashboard
-- Out-of-stock display on public website
-- SKU/code per product
-- Scent family filter on public catalogue
-- Better admin dashboard with latest requests
-- Request status filters: New, Contacted, Completed, Cancelled
-- Product CSV export includes stock/SKU/family
-- Sitemap and robots.txt routes for SEO
+- Product image gallery: add several photos per perfume
+- Homepage banner manager: promote new arrivals, offers and gift sets from admin
+- CSV product import with downloadable template
+- Full JSON backup export
+- Product view tracking
+- WhatsApp click tracking per product
+- Dashboard now shows views and WhatsApp clicks
+- Google Analytics ID field in settings
+- Footer note setting
+- Existing stock, low stock, requests, Cloudinary and PostgreSQL features remain
 
-## Render environment variables
-
-Keep these in Render, not GitHub:
-
-```text
-DATABASE_URL=your Neon PostgreSQL connection string
-CLOUDINARY_CLOUD_NAME=your Cloudinary cloud name
-CLOUDINARY_API_KEY=your Cloudinary API key
-CLOUDINARY_API_SECRET=your Cloudinary API secret
-SECRET_KEY=any long random string
-```
-
-## Deploy
+## Render settings
 
 Build command:
 
@@ -48,18 +37,33 @@ Start command:
 gunicorn app:app
 ```
 
-## Admin
-
-Open:
+Environment variables:
 
 ```text
-/admin
+PYTHON_VERSION=3.11.9
+SECRET_KEY=your-long-secret-key
+DATABASE_URL=your-neon-postgres-connection-string
+CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=your-api-key
+CLOUDINARY_API_SECRET=your-api-secret
 ```
 
-Default login if your database is new:
+## After uploading to GitHub
+
+1. Commit the new files.
+2. In Render, run **Manual Deploy -> Clear build cache & deploy**.
+3. Login to `/admin`.
+4. Check the new admin menu items:
+   - Banners
+   - Import CSV
+   - Backup JSON
+5. Edit old products if needed to add stock, gallery images and SKU.
+
+## Default local login
 
 ```text
-admin / admin123
+Username: admin
+Password: admin123
 ```
 
-Change the password after login.
+Change the password before using the site seriously.

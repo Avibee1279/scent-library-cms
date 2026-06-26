@@ -6,18 +6,22 @@
     <p>Manage products, stock, requests and photos from one place.</p>
   </div>
   <div class="header-actions">
+    <a class="button secondary" href="{{ url_for('export_backup_json') }}">Backup JSON</a>
     <a class="button secondary" href="{{ url_for('export_products') }}">Export CSV</a>
+    <a class="button secondary" href="{{ url_for('import_products') }}">Import CSV</a>
     <a class="button" href="{{ url_for('admin_product_new') }}">+ Add product</a>
   </div>
 </div>
 
-<div class="stats six">
+<div class="stats eight">
   <div><strong>{{ stats.total }}</strong><span>Total products</span></div>
   <div><strong>{{ stats.active }}</strong><span>Active</span></div>
   <div><strong>{{ stats.featured }}</strong><span>Featured</span></div>
   <div><strong>{{ stats.orders }}</strong><span>New requests</span></div>
   <div><strong>{{ stats.low_stock }}</strong><span>Low stock</span></div>
   <div><strong>{{ stats.out_of_stock }}</strong><span>Out of stock</span></div>
+  <div><strong>{{ stats.views }}</strong><span>Product views</span></div>
+  <div><strong>{{ stats.clicks }}</strong><span>WhatsApp clicks</span></div>
 </div>
 
 <div class="dashboard-grid">
@@ -52,11 +56,27 @@
       <p class="muted">No customer requests yet.</p>
     {% endif %}
   </section>
+
+  <section class="admin-panel">
+    <div class="panel-title"><h2>Top viewed products</h2><span>Views / clicks</span></div>
+    {% if top_products %}
+      <div class="mini-list">
+        {% for p in top_products %}
+          <div class="mini-row">
+            <span>{{ p.name }} <small>{{ p.brand }}</small></span>
+            <strong>{{ p.views or 0 }} / {{ p.whatsapp_clicks or 0 }}</strong>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">No product views yet.</p>
+    {% endif %}
+  </section>
 </div>
 
 <div class="table-wrap" id="products-table">
 <table>
-  <thead><tr><th>Product</th><th>Category</th><th>Family</th><th>Stock</th><th>Price</th><th>Featured</th><th>Status</th><th>Actions</th></tr></thead>
+  <thead><tr><th>Product</th><th>Category</th><th>Family</th><th>Stock</th><th>Price</th><th>Views</th><th>Clicks</th><th>Featured</th><th>Status</th><th>Actions</th></tr></thead>
   <tbody>
   {% for p in products %}
     <tr>
@@ -74,6 +94,8 @@
         {% else %}<span class="pill active">{{ p.stock_qty }} in stock</span>{% endif %}
       </td>
       <td>{{ currency }} {{ "%.0f"|format(p.price) }}</td>
+      <td>{{ p.views or 0 }}</td>
+      <td>{{ p.whatsapp_clicks or 0 }}</td>
       <td>{% if p.is_featured %}<span class="pill active">Yes</span>{% else %}<span class="pill neutral">No</span>{% endif %}</td>
       <td>{% if p.is_active %}<span class="pill active">Active</span>{% else %}<span class="pill inactive">Hidden</span>{% endif %}</td>
       <td class="actions">

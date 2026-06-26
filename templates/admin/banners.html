@@ -1,0 +1,42 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+<div class="admin-header">
+  <div>
+    <h1>Homepage banners</h1>
+    <p>Create promotions for new arrivals, gift sets, offers and seasonal drops.</p>
+  </div>
+</div>
+
+<form class="form-grid" method="post" enctype="multipart/form-data">
+  <label>Title<input name="title" placeholder="New arrivals now available" required></label>
+  <label>Sort order<input type="number" name="sort_order" value="0"></label>
+  <label>Button text<input name="button_text" placeholder="Shop now"></label>
+  <label>Button link<input name="button_link" placeholder="#products" value="#products"></label>
+  <label class="wide">Subtitle<textarea name="subtitle" rows="3" placeholder="Short promotional text"></textarea></label>
+  <label class="wide">Banner image<input type="file" name="image" accept="image/*"></label>
+  <label class="check"><input type="checkbox" name="is_active" checked> Show on homepage</label>
+  <div class="wide"><button class="button" type="submit">Add banner</button></div>
+</form>
+
+<div class="table-wrap spacing-top">
+<table>
+  <thead><tr><th>Banner</th><th>Image</th><th>Status</th><th>Actions</th></tr></thead>
+  <tbody>
+    {% for b in banners %}
+      <tr>
+        <td><strong>{{ b.title }}</strong><small>{{ b.subtitle }} · order {{ b.sort_order }}</small></td>
+        <td>{% if b.image_url %}<img class="table-thumb" src="{{ image_url(b.image_url) }}" alt="">{% else %}<span class="tiny-placeholder">✧</span>{% endif %}</td>
+        <td>{% if b.is_active %}<span class="pill active">Active</span>{% else %}<span class="pill inactive">Hidden</span>{% endif %}</td>
+        <td>
+          <form method="post" action="{{ url_for('admin_banner_delete', banner_id=b.id) }}" onsubmit="return confirm('Delete this banner?')">
+            <button type="submit" class="link-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4">No banner yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

@@ -6,6 +6,15 @@
   <title>{{ site_name }}</title>
   <meta name="description" content="{{ tagline }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+{% if google_analytics_id %}
+  <script async src="https://www.googletagmanager.com/gtag/js?id={{ google_analytics_id }}"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', '{{ google_analytics_id }}');
+  </script>
+  {% endif %}
 </head>
 <body>
   <div class="top-progress" id="topProgress"></div>
@@ -37,6 +46,7 @@
 
   <footer class="footer">
     <p>{{ site_name }} · {{ business_address }} · <a href="{{ instagram_url }}" target="_blank" rel="noopener">Instagram</a></p>
+    <p class="footer-note">{{ footer_note }}</p>
   </footer>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>

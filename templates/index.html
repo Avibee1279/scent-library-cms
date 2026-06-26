@@ -19,6 +19,24 @@
   </div>
 </header>
 
+{% if banners %}
+<section class="promo-strip section-reveal">
+  {% for banner in banners %}
+    <div class="promo-card">
+      {% if banner.image_url %}<img src="{{ image_url(banner.image_url) }}" alt="{{ banner.title }}">{% endif %}
+      <div>
+        <p class="eyebrow">Promotion</p>
+        <h2>{{ banner.title }}</h2>
+        <p>{{ banner.subtitle }}</p>
+        {% if banner.button_text %}
+          <a class="btn small" href="{{ banner.button_link or '#products' }}">{{ banner.button_text }}</a>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+</section>
+{% endif %}
+
 {% if featured %}
 <section class="section section-reveal">
   <div class="section-title">

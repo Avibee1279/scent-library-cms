@@ -30,9 +30,9 @@
     <div class="product-bottom">
       <strong>{{ currency }} {{ "%.0f"|format(product.price) }}</strong>
       {% if product.stock_qty is defined and product.stock_qty <= 0 %}
-        <a class="btn whatsapp muted" href="https://wa.me/{{ whatsapp_number }}?text={{ quote_plus('Hi, I want to know when ' ~ product.name ~ ' will be available again.') }}" target="_blank" rel="noopener">Restock?</a>
+        <a class="btn whatsapp muted" href="{{ url_for('track_whatsapp_restock', product_id=product.id) }}" target="_blank" rel="noopener">Restock?</a>
       {% else %}
-        <a class="btn whatsapp" href="https://wa.me/{{ whatsapp_number }}?text={{ quote_plus('Hi, I am interested in ' ~ product.name ~ ' ' ~ (product.size or '') ~ '. Is it available?') }}" target="_blank" rel="noopener">WhatsApp</a>
+        <a class="btn whatsapp" href="{{ url_for('track_whatsapp_product', product_id=product.id) }}" target="_blank" rel="noopener">WhatsApp</a>
       {% endif %}
     </div>
   </div>

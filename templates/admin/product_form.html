@@ -25,9 +25,26 @@
   <label class="wide">Occasion<input name="occasion" value="{{ product.occasion if product else '' }}"></label>
   <label class="wide">Description<textarea name="description" rows="4">{{ product.description if product else '' }}</textarea></label>
   <label class="wide">Notes<textarea name="notes" rows="3">{{ product.notes if product else '' }}</textarea></label>
-  <label class="wide">Photo<input type="file" name="image" accept="image/*"></label>
+  <label class="wide">Main photo<input type="file" name="image" accept="image/*"></label>
+  <label class="wide">Extra gallery photos<input type="file" name="gallery_images" accept="image/*" multiple></label>
+  <label class="wide">Gallery caption<input name="gallery_caption" placeholder="Optional caption for uploaded gallery photos"></label>
   {% if product and product.image_filename %}
-    <div class="current-image wide"><img src="{{ image_url(product.image_filename) }}" alt="Current image"><span>Current photo</span></div>
+    <div class="current-image wide"><img src="{{ image_url(product.image_filename) }}" alt="Current image"><span>Current main photo</span></div>
+  {% endif %}
+  {% if gallery %}
+    <div class="wide gallery-admin">
+      <h3>Product gallery</h3>
+      <div class="gallery-admin-grid">
+        {% for img in gallery %}
+          <div class="gallery-admin-card">
+            <img src="{{ image_url(img.image_url) }}" alt="Gallery image">
+            <form method="post" action="{{ url_for('admin_product_image_delete', image_id=img.id) }}" onsubmit="return confirm('Remove this image?')">
+              <button type="submit" class="link-danger">Remove</button>
+            </form>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
   {% endif %}
   <label class="check"><input type="checkbox" name="is_featured" {% if product and product.is_featured %}checked{% endif %}> Featured product</label>
   <label class="check"><input type="checkbox" name="is_active" {% if not product or product.is_active %}checked{% endif %}> Show on website</label>
