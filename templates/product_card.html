@@ -1,7 +1,7 @@
 <article class="product-card card-reveal">
   <a class="product-image" href="{{ url_for('product_detail', product_id=product.id, slug=slugify(product.name)) }}">
     {% if product.image_filename %}
-      <img src="{{ url_for('static', filename='uploads/' ~ product.image_filename) }}" alt="{{ product.name }}">
+      <img src="{{ image_url(product.image_filename) }}" alt="{{ product.name }}">
     {% else %}
       <span class="placeholder-bottle">✧</span>
     {% endif %}

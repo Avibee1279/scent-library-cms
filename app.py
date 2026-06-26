@@ -14,6 +14,15 @@ from flask import (
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
+# Cloudinary is used for permanent product photo storage on hosted servers.
+# If Cloudinary environment variables are missing, the app falls back to local uploads.
+try:
+    import cloudinary
+    import cloudinary.uploader
+except ImportError:  # Local fallback if package is not installed yet
+    cloudinary = None
+
+
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DB_PATH = os.environ.get("DATABASE_PATH", os.path.join(BASE_DIR, "scent_library.db"))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
@@ -23,6 +32,20 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "CHANGE-ME-before-going-live")
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # 8MB image upload limit
+
+# Cloudinary config. Add these values in Render Environment Variables.
+CLOUDINARY_CLOUD_NAME = os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip()
+CLOUDINARY_API_KEY = os.environ.get("CLOUDINARY_API_KEY", "").strip()
+CLOUDINARY_API_SECRET = os.environ.get("CLOUDINARY_API_SECRET", "").strip()
+USE_CLOUDINARY = bool(CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET and cloudinary)
+
+if USE_CLOUDINARY:
+    cloudinary.config(
+        cloud_name=CLOUDINARY_CLOUD_NAME,
+        api_key=CLOUDINARY_API_KEY,
+        api_secret=CLOUDINARY_API_SECRET,
+        secure=True,
+    )
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -69,6 +92,40 @@ def setting(key, default=""):
     return row["value"] if row else default
 
 
+def image_url(image_value):
+    """Return the correct image URL for Cloudinary URLs or local upload filenames."""
+    if not image_value:
+        return ""
+    image_value = str(image_value).strip()
+    if image_value.startswith("http://") or image_value.startswith("https://"):
+        return image_value
+    return url_for("static", filename="uploads/" + image_value)
+
+
+def upload_product_image(file_storage, product_name="perfume"):
+    """Upload product image to Cloudinary when configured, else local static/uploads."""
+    if not file_storage or not file_storage.filename:
+        return None
+
+    if not allowed_file(file_storage.filename):
+        raise ValueError("Image must be png, jpg, jpeg, webp or gif.")
+
+    if USE_CLOUDINARY:
+        result = cloudinary.uploader.upload(
+            file_storage,
+            folder="scent-library/products",
+            public_id=f"{slugify(product_name)}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}",
+            overwrite=True,
+            resource_type="image",
+        )
+        return result.get("secure_url")
+
+    filename = secure_filename(file_storage.filename)
+    filename = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{filename}"
+    file_storage.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
+    return filename
+
+
 @app.context_processor
 def inject_globals():
     return {
@@ -82,6 +139,7 @@ def inject_globals():
         "business_address": setting("business_address", "Mauritius"),
         "quote_plus": quote_plus,
         "slugify": slugify,
+        "image_url": image_url,
     }
 
 
@@ -363,13 +421,16 @@ def save_product(product_id=None):
     image_filename = request.form.get("existing_image", "") or None
     file = request.files.get("image")
     if file and file.filename:
-        if not allowed_file(file.filename):
-            flash("Image must be png, jpg, jpeg, webp or gif.", "error")
+        try:
+            uploaded_image = upload_product_image(file, name)
+            if uploaded_image:
+                image_filename = uploaded_image
+        except ValueError as exc:
+            flash(str(exc), "error")
             return redirect(request.url)
-        filename = secure_filename(file.filename)
-        filename = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{filename}"
-        file.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
-        image_filename = filename
+        except Exception as exc:
+            flash(f"Image upload failed: {exc}", "error")
+            return redirect(request.url)
 
     try:
         price = float(request.form.get("price") or 0)

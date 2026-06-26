@@ -23,7 +23,7 @@
   <label class="wide">Notes<textarea name="notes" rows="3">{{ product.notes if product else '' }}</textarea></label>
   <label class="wide">Photo<input type="file" name="image" accept="image/*"></label>
   {% if product and product.image_filename %}
-    <div class="current-image wide"><img src="{{ url_for('static', filename='uploads/' ~ product.image_filename) }}" alt="Current image"><span>Current photo</span></div>
+    <div class="current-image wide"><img src="{{ image_url(product.image_filename) }}" alt="Current image"><span>Current photo</span></div>
   {% endif %}
   <label class="check"><input type="checkbox" name="is_featured" {% if product and product.is_featured %}checked{% endif %}> Featured product</label>
   <label class="check"><input type="checkbox" name="is_active" {% if not product or product.is_active %}checked{% endif %}> Show on website</label>

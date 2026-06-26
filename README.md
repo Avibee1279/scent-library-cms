@@ -115,3 +115,20 @@ For local testing, use:
 ```bash
 python app.py
 ```
+
+## Cloudinary permanent photo upload
+
+This version can upload product photos to Cloudinary so uploaded photos do not disappear when hosted on services with temporary storage.
+
+Add these Environment Variables in Render:
+
+```text
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+SECRET_KEY=change-this-to-a-long-random-secret
+```
+
+Then redeploy. Product photos uploaded from the admin panel will be stored in Cloudinary.
+
+Important: the default SQLite database is still local. For full production use, use PostgreSQL or a paid persistent disk so product details also remain safe after redeploy/restart.

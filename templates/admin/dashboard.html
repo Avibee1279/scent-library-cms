@@ -24,7 +24,7 @@
     <tr>
       <td>
         <div class="product-cell">
-          {% if p.image_filename %}<img src="{{ url_for('static', filename='uploads/' ~ p.image_filename) }}" alt="">{% else %}<span class="tiny-placeholder">✧</span>{% endif %}
+          {% if p.image_filename %}<img src="{{ image_url(p.image_filename) }}" alt="">{% else %}<span class="tiny-placeholder">✧</span>{% endif %}
           <div><strong>{{ p.name }}</strong><small>{{ p.brand }} · order {{ p.sort_order }}</small></div>
         </div>
       </td>
