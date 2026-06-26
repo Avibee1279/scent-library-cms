@@ -2,7 +2,6 @@ import csv
 import io
 import os
 import re
-import sqlite3
 from datetime import datetime
 from functools import wraps
 from urllib.parse import quote_plus
@@ -11,11 +10,14 @@ from flask import (
     Flask, Response, abort, flash, g, redirect, render_template,
     request, send_from_directory, session, url_for
 )
+from sqlalchemy import (
+    create_engine, MetaData, Table, Column, Integer, Text, Float, text, inspect
+)
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 # Cloudinary is used for permanent product photo storage on hosted servers.
-# If Cloudinary environment variables are missing, the app falls back to local uploads.
+# Product data is stored in PostgreSQL when DATABASE_URL is set, or SQLite locally.
 try:
     import cloudinary
     import cloudinary.uploader
@@ -24,7 +26,15 @@ except ImportError:  # Local fallback if package is not installed yet
 
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DB_PATH = os.environ.get("DATABASE_PATH", os.path.join(BASE_DIR, "scent_library.db"))
+
+# Render PostgreSQL provides DATABASE_URL. Locally we fall back to SQLite.
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+if DATABASE_URL.startswith("postgres://"):
+    # SQLAlchemy expects postgresql://
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+if not DATABASE_URL:
+    DATABASE_URL = "sqlite:///" + os.path.join(BASE_DIR, "scent_library.db")
+
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif"}
 
@@ -32,6 +42,74 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "CHANGE-ME-before-going-live")
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # 8MB image upload limit
+
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, future=True)
+metadata = MetaData()
+
+admins_table = Table(
+    "admins", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("username", Text, unique=True, nullable=False),
+    Column("password_hash", Text, nullable=False),
+    Column("created_at", Text, nullable=False),
+    Column("updated_at", Text),
+)
+
+products_table = Table(
+    "products", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", Text, nullable=False),
+    Column("brand", Text),
+    Column("category", Text, nullable=False, default="Unisex"),
+    Column("size", Text),
+    Column("sku", Text),
+    Column("scent_family", Text),
+    Column("stock_qty", Integer, nullable=False, default=0),
+    Column("low_stock_threshold", Integer, nullable=False, default=2),
+    Column("price", Float, nullable=False, default=0),
+    Column("description", Text),
+    Column("notes", Text),
+    Column("occasion", Text),
+    Column("image_filename", Text),
+    Column("is_featured", Integer, nullable=False, default=0),
+    Column("is_active", Integer, nullable=False, default=1),
+    Column("sort_order", Integer, nullable=False, default=0),
+    Column("created_at", Text, nullable=False),
+    Column("updated_at", Text, nullable=False),
+)
+
+combos_table = Table(
+    "combos", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("title", Text, nullable=False),
+    Column("description", Text),
+    Column("product_1", Text),
+    Column("product_2", Text),
+    Column("is_active", Integer, nullable=False, default=1),
+    Column("sort_order", Integer, nullable=False, default=0),
+    Column("created_at", Text, nullable=False),
+    Column("updated_at", Text, nullable=False),
+)
+
+order_requests_table = Table(
+    "order_requests", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("customer_name", Text, nullable=False),
+    Column("phone", Text, nullable=False),
+    Column("location", Text),
+    Column("product_id", Integer),
+    Column("product_name", Text),
+    Column("message", Text),
+    Column("status", Text, nullable=False, default="New"),
+    Column("created_at", Text, nullable=False),
+    Column("updated_at", Text, nullable=False),
+)
+
+settings_table = Table(
+    "settings", metadata,
+    Column("key", Text, primary_key=True),
+    Column("value", Text, nullable=False),
+)
 
 # Cloudinary config. Add these values in Render Environment Variables.
 CLOUDINARY_CLOUD_NAME = os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip()
@@ -54,10 +132,52 @@ def now_iso():
     return datetime.utcnow().isoformat(timespec="seconds")
 
 
+class DatabaseSession:
+    """Small helper so the app can use PostgreSQL on Render and SQLite locally."""
+
+    def __init__(self):
+        self.conn = engine.connect()
+
+    def _prepare(self, sql, params):
+        if params is None:
+            return sql, {}
+        if isinstance(params, dict):
+            return sql, params
+        if isinstance(params, (tuple, list)):
+            values = list(params)
+            named = {}
+            index = 0
+
+            def repl(_match):
+                nonlocal index
+                key = f"p{index}"
+                if index >= len(values):
+                    raise ValueError("Not enough SQL parameters supplied")
+                named[key] = values[index]
+                index += 1
+                return f":{key}"
+
+            return re.sub(r"\?", repl, sql), named
+        return sql, params
+
+    def execute(self, sql, params=None):
+        sql, params = self._prepare(sql, params)
+        result = self.conn.execute(text(sql), params)
+        return result.mappings()
+
+    def commit(self):
+        self.conn.commit()
+
+    def rollback(self):
+        self.conn.rollback()
+
+    def close(self):
+        self.conn.close()
+
+
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
+        g.db = DatabaseSession()
     return g.db
 
 
@@ -65,8 +185,9 @@ def get_db():
 def close_db(exception=None):
     db = g.pop("db", None)
     if db is not None:
+        if exception:
+            db.rollback()
         db.close()
-
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -143,161 +264,135 @@ def inject_globals():
     }
 
 
-def init_db():
-    db = sqlite3.connect(DB_PATH)
-    db.row_factory = sqlite3.Row
-    cur = db.cursor()
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS admins (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            updated_at TEXT
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS products (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            brand TEXT,
-            category TEXT NOT NULL DEFAULT 'Unisex',
-            size TEXT,
-            price REAL NOT NULL DEFAULT 0,
-            description TEXT,
-            notes TEXT,
-            occasion TEXT,
-            image_filename TEXT,
-            is_featured INTEGER NOT NULL DEFAULT 0,
-            is_active INTEGER NOT NULL DEFAULT 1,
-            sort_order INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS combos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            description TEXT,
-            product_1 TEXT,
-            product_2 TEXT,
-            is_active INTEGER NOT NULL DEFAULT 1,
-            sort_order INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS order_requests (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            customer_name TEXT NOT NULL,
-            phone TEXT NOT NULL,
-            location TEXT,
-            product_id INTEGER,
-            product_name TEXT,
-            message TEXT,
-            status TEXT NOT NULL DEFAULT 'New',
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            FOREIGN KEY(product_id) REFERENCES products(id)
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        )
-    """)
-
-    admin_count = cur.execute("SELECT COUNT(*) AS c FROM admins").fetchone()["c"]
-    if admin_count == 0:
-        cur.execute(
-            "INSERT INTO admins (username, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?)",
-            ("admin", generate_password_hash("admin123"), now_iso(), now_iso())
-        )
-
-    defaults = {
-        "site_name": "The Scent Library",
-        "hero_title": "Find your next signature scent.",
-        "tagline": "Premium perfumes, inspired scents and layering combos in Mauritius.",
-        "whatsapp_number": "23050000000",
-        "instagram_url": "https://instagram.com/scentlibrary.mu",
-        "currency": "Rs",
-        "business_email": "",
-        "business_address": "Mauritius",
-        "delivery_text": "Delivery available in Mauritius. Payment by MCB Juice or cash on delivery depending on location.",
-        "homepage_notice": "New arrivals and layering combos available this week.",
+def migrate_schema():
+    """Add new columns safely when upgrading an existing database."""
+    insp = inspect(engine)
+    existing_tables = insp.get_table_names()
+    if "products" not in existing_tables:
+        return
+    existing_cols = {col["name"] for col in insp.get_columns("products")}
+    migrations = {
+        "sku": "ALTER TABLE products ADD COLUMN sku TEXT",
+        "scent_family": "ALTER TABLE products ADD COLUMN scent_family TEXT",
+        "stock_qty": "ALTER TABLE products ADD COLUMN stock_qty INTEGER DEFAULT 0",
+        "low_stock_threshold": "ALTER TABLE products ADD COLUMN low_stock_threshold INTEGER DEFAULT 2",
     }
-    for key, value in defaults.items():
-        cur.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value))
+    with engine.begin() as conn:
+        for col, statement in migrations.items():
+            if col not in existing_cols:
+                conn.execute(text(statement))
 
-    product_count = cur.execute("SELECT COUNT(*) AS c FROM products").fetchone()["c"]
-    if product_count == 0:
-        samples = [
-            ("Amber Oud Carbon Edition", "Al Haramain", "Men", "60ml", 1500, "Fresh, aromatic and modern. Good for office and evening wear.", "bergamot, lavender, woods", "Office / Night", None, 1, 1, 1),
-            ("Khamrah Waha", "Lattafa", "Unisex", "100ml", 1800, "Sweet, warm and addictive. Perfect for colder evenings and special occasions.", "dates, vanilla, amber", "Evening", None, 1, 1, 2),
-            ("Pacific Chill Inspiration", "The Scent Library", "Unisex", "50ml", 900, "Fresh citrus scent with a clean summer feeling.", "citrus, mint, musk", "Summer / Day", None, 1, 1, 3),
-            ("Ombre Nomade Inspiration", "The Scent Library", "Unisex", "50ml", 950, "Deep oud style fragrance for strong projection.", "oud, rose, incense", "Night / Special Occasion", None, 0, 1, 4),
-            ("Invictus Parfum Inspiration", "The Scent Library", "Men", "50ml", 850, "Sporty, clean and powerful masculine scent.", "marine notes, woods, amber", "Daily", None, 0, 1, 5),
-            ("Kayali Inspired Mini Set", "The Scent Library", "Women", "5 x 10ml", 1200, "A discovery set for layering and gifting.", "vanilla, musk, fruits", "Gift / Layering", None, 1, 1, 6),
-        ]
-        for p in samples:
-            cur.execute(
-                """
-                INSERT INTO products
-                (name, brand, category, size, price, description, notes, occasion, image_filename, is_featured, is_active, sort_order, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (*p, now_iso(), now_iso())
+
+def init_db():
+    """Create database tables and seed default data if database is empty."""
+    metadata.create_all(engine)
+    migrate_schema()
+
+    with engine.begin() as conn:
+        admin_count = conn.execute(text("SELECT COUNT(*) AS c FROM admins")).mappings().fetchone()["c"]
+        if admin_count == 0:
+            conn.execute(
+                text("""
+                    INSERT INTO admins (username, password_hash, created_at, updated_at)
+                    VALUES (:username, :password_hash, :created_at, :updated_at)
+                """),
+                {
+                    "username": "admin",
+                    "password_hash": generate_password_hash("admin123"),
+                    "created_at": now_iso(),
+                    "updated_at": now_iso(),
+                },
             )
 
-    combo_count = cur.execute("SELECT COUNT(*) AS c FROM combos").fetchone()["c"]
-    if combo_count == 0:
-        combos = [
-            ("Fresh Office", "Clean, professional and not too loud.", "Amber Oud Carbon", "Clean musk", 1),
-            ("Sweet Night", "Warm, sweet and attractive for evening wear.", "Khamrah Waha", "Vanilla scent", 2),
-            ("Oud Statement", "Strong projection for special occasions.", "Ombre style", "Rose / incense", 3),
-        ]
-        for title, desc, p1, p2, order in combos:
-            cur.execute(
-                """
-                INSERT INTO combos (title, description, product_1, product_2, is_active, sort_order, created_at, updated_at)
-                VALUES (?, ?, ?, ?, 1, ?, ?, ?)
-                """,
-                (title, desc, p1, p2, order, now_iso(), now_iso())
-            )
+        defaults = {
+            "site_name": "The Scent Library",
+            "hero_title": "Find your next signature scent.",
+            "tagline": "Premium perfumes, inspired scents and layering combos in Mauritius.",
+            "whatsapp_number": "23050000000",
+            "instagram_url": "https://instagram.com/scentlibrary.mu",
+            "currency": "Rs",
+            "business_email": "",
+            "business_address": "Mauritius",
+            "delivery_text": "Delivery available in Mauritius. Payment by MCB Juice or cash on delivery depending on location.",
+            "homepage_notice": "New arrivals and layering combos available this week.",
+        }
+        for key, value in defaults.items():
+            exists = conn.execute(text("SELECT 1 FROM settings WHERE key = :key"), {"key": key}).fetchone()
+            if not exists:
+                conn.execute(text("INSERT INTO settings (key, value) VALUES (:key, :value)"), {"key": key, "value": value})
 
-    db.commit()
-    db.close()
+        product_count = conn.execute(text("SELECT COUNT(*) AS c FROM products")).mappings().fetchone()["c"]
+        if product_count == 0:
+            samples = [
+                ("Amber Oud Carbon Edition", "Al Haramain", "Men", "60ml", 1500, "Fresh, aromatic and modern. Good for office and evening wear.", "bergamot, lavender, woods", "Office / Night", None, 1, 1, 1),
+                ("Khamrah Waha", "Lattafa", "Unisex", "100ml", 1800, "Sweet, warm and addictive. Perfect for colder evenings and special occasions.", "dates, vanilla, amber", "Evening", None, 1, 1, 2),
+                ("Pacific Chill Inspiration", "The Scent Library", "Unisex", "50ml", 900, "Fresh citrus scent with a clean summer feeling.", "citrus, mint, musk", "Summer / Day", None, 1, 1, 3),
+                ("Ombre Nomade Inspiration", "The Scent Library", "Unisex", "50ml", 950, "Deep oud style fragrance for strong projection.", "oud, rose, incense", "Night / Special Occasion", None, 0, 1, 4),
+                ("Invictus Parfum Inspiration", "The Scent Library", "Men", "50ml", 850, "Sporty, clean and powerful masculine scent.", "marine notes, woods, amber", "Daily", None, 0, 1, 5),
+                ("Kayali Inspired Mini Set", "The Scent Library", "Women", "5 x 10ml", 1200, "A discovery set for layering and gifting.", "vanilla, musk, fruits", "Gift / Layering", None, 1, 1, 6),
+            ]
+            for p in samples:
+                conn.execute(
+                    text("""
+                        INSERT INTO products
+                        (name, brand, category, size, price, description, notes, occasion, image_filename,
+                         is_featured, is_active, sort_order, created_at, updated_at)
+                        VALUES (:name, :brand, :category, :size, :price, :description, :notes, :occasion, :image_filename,
+                                :is_featured, :is_active, :sort_order, :created_at, :updated_at)
+                    """),
+                    {
+                        "name": p[0], "brand": p[1], "category": p[2], "size": p[3], "price": p[4],
+                        "description": p[5], "notes": p[6], "occasion": p[7], "image_filename": p[8],
+                        "is_featured": p[9], "is_active": p[10], "sort_order": p[11],
+                        "created_at": now_iso(), "updated_at": now_iso(),
+                    },
+                )
+
+        combo_count = conn.execute(text("SELECT COUNT(*) AS c FROM combos")).mappings().fetchone()["c"]
+        if combo_count == 0:
+            combos = [
+                ("Fresh Office", "Clean, professional and not too loud.", "Amber Oud Carbon", "Clean musk", 1),
+                ("Sweet Night", "Warm, sweet and attractive for evening wear.", "Khamrah Waha", "Vanilla scent", 2),
+                ("Oud Statement", "Strong projection for special occasions.", "Ombre style", "Rose / incense", 3),
+            ]
+            for title, desc, p1, p2, order in combos:
+                conn.execute(
+                    text("""
+                        INSERT INTO combos (title, description, product_1, product_2, is_active, sort_order, created_at, updated_at)
+                        VALUES (:title, :description, :product_1, :product_2, 1, :sort_order, :created_at, :updated_at)
+                    """),
+                    {
+                        "title": title, "description": desc, "product_1": p1, "product_2": p2,
+                        "sort_order": order, "created_at": now_iso(), "updated_at": now_iso(),
+                    },
+                )
 
 
 def product_query(active_only=True):
     q = request.args.get("q", "").strip()
     category = request.args.get("category", "All")
+    family = request.args.get("family", "All")
     sql = "SELECT * FROM products WHERE 1=1"
     params = []
     if active_only:
         sql += " AND is_active = 1"
     if q:
-        sql += " AND (name LIKE ? OR brand LIKE ? OR description LIKE ? OR notes LIKE ? OR occasion LIKE ?)"
+        sql += " AND (name LIKE ? OR brand LIKE ? OR description LIKE ? OR notes LIKE ? OR occasion LIKE ? OR sku LIKE ? OR scent_family LIKE ?)"
         like = f"%{q}%"
-        params.extend([like, like, like, like, like])
+        params.extend([like, like, like, like, like, like, like])
     if category and category != "All":
         sql += " AND category = ?"
         params.append(category)
+    if family and family != "All":
+        sql += " AND scent_family = ?"
+        params.append(family)
     sql += " ORDER BY is_featured DESC, sort_order ASC, name ASC"
-    return get_db().execute(sql, params).fetchall(), q, category
+    return get_db().execute(sql, params).fetchall(), q, category, family
 
 
 @app.route("/")
 def index():
-    products, q, selected_category = product_query(active_only=True)
+    products, q, selected_category, selected_family = product_query(active_only=True)
     featured = get_db().execute(
         "SELECT * FROM products WHERE is_active = 1 AND is_featured = 1 ORDER BY sort_order ASC, name ASC LIMIT 6"
     ).fetchall()
@@ -305,6 +400,7 @@ def index():
         "SELECT * FROM combos WHERE is_active = 1 ORDER BY sort_order ASC, title ASC"
     ).fetchall()
     categories = ["All", "Men", "Women", "Unisex"]
+    families = ["All"] + [row["scent_family"] for row in get_db().execute("SELECT DISTINCT scent_family FROM products WHERE is_active = 1 AND COALESCE(scent_family,'') <> '' ORDER BY scent_family").fetchall()]
     return render_template(
         "index.html",
         products=products,
@@ -312,6 +408,8 @@ def index():
         combos=combos,
         categories=categories,
         selected_category=selected_category,
+        selected_family=selected_family,
+        families=families,
         q=q,
         delivery_text=setting("delivery_text"),
         homepage_notice=setting("homepage_notice"),
@@ -354,6 +452,27 @@ def order_request():
     return redirect(url_for("index") + "#contact")
 
 
+
+@app.route("/sitemap.xml")
+def sitemap_xml():
+    products = get_db().execute("SELECT id, name, updated_at FROM products WHERE is_active = 1 ORDER BY updated_at DESC").fetchall()
+    base_url = request.url_root.rstrip("/")
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        f'<url><loc>{base_url}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>',
+    ]
+    for p in products:
+        lines.append(f'<url><loc>{base_url}{url_for("product_detail", product_id=p["id"], slug=slugify(p["name"]))}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>')
+    lines.append('</urlset>')
+    return Response("\n".join(lines), mimetype="application/xml")
+
+
+@app.route("/robots.txt")
+def robots_txt():
+    return Response("User-agent: *\nAllow: /\nSitemap: " + request.url_root.rstrip("/") + "/sitemap.xml\n", mimetype="text/plain")
+
+
 # ------------------------- Admin -------------------------
 
 @app.route("/admin/login", methods=["GET", "POST"])
@@ -388,8 +507,12 @@ def admin_dashboard():
         "active": get_db().execute("SELECT COUNT(*) AS c FROM products WHERE is_active = 1").fetchone()["c"],
         "featured": get_db().execute("SELECT COUNT(*) AS c FROM products WHERE is_featured = 1").fetchone()["c"],
         "orders": get_db().execute("SELECT COUNT(*) AS c FROM order_requests WHERE status = 'New'").fetchone()["c"],
+        "low_stock": get_db().execute("SELECT COUNT(*) AS c FROM products WHERE is_active = 1 AND stock_qty <= low_stock_threshold").fetchone()["c"],
+        "out_of_stock": get_db().execute("SELECT COUNT(*) AS c FROM products WHERE is_active = 1 AND stock_qty <= 0").fetchone()["c"],
     }
-    return render_template("admin/dashboard.html", products=products, stats=stats)
+    recent_orders = get_db().execute("SELECT * FROM order_requests ORDER BY created_at DESC LIMIT 5").fetchall()
+    low_stock = get_db().execute("SELECT * FROM products WHERE is_active = 1 AND stock_qty <= low_stock_threshold ORDER BY stock_qty ASC, name ASC LIMIT 6").fetchall()
+    return render_template("admin/dashboard.html", products=products, stats=stats, recent_orders=recent_orders, low_stock=low_stock)
 
 
 @app.route("/admin/products/new", methods=["GET", "POST"])
@@ -440,12 +563,24 @@ def save_product(product_id=None):
         sort_order = int(request.form.get("sort_order") or 0)
     except ValueError:
         sort_order = 0
+    try:
+        stock_qty = int(request.form.get("stock_qty") or 0)
+    except ValueError:
+        stock_qty = 0
+    try:
+        low_stock_threshold = int(request.form.get("low_stock_threshold") or 2)
+    except ValueError:
+        low_stock_threshold = 2
 
     data = {
         "name": name,
         "brand": request.form.get("brand", "").strip(),
         "category": request.form.get("category", "Unisex"),
         "size": request.form.get("size", "").strip(),
+        "sku": request.form.get("sku", "").strip(),
+        "scent_family": request.form.get("scent_family", "").strip(),
+        "stock_qty": stock_qty,
+        "low_stock_threshold": low_stock_threshold,
         "price": price,
         "description": request.form.get("description", "").strip(),
         "notes": request.form.get("notes", "").strip(),
@@ -462,7 +597,8 @@ def save_product(product_id=None):
         db.execute(
             """
             UPDATE products SET
-            name=:name, brand=:brand, category=:category, size=:size, price=:price,
+            name=:name, brand=:brand, category=:category, size=:size, sku=:sku, scent_family=:scent_family,
+            stock_qty=:stock_qty, low_stock_threshold=:low_stock_threshold, price=:price,
             description=:description, notes=:notes, occasion=:occasion, image_filename=:image_filename,
             is_featured=:is_featured, is_active=:is_active, sort_order=:sort_order, updated_at=:updated_at
             WHERE id=:id
@@ -474,8 +610,8 @@ def save_product(product_id=None):
         db.execute(
             """
             INSERT INTO products
-            (name, brand, category, size, price, description, notes, occasion, image_filename, is_featured, is_active, sort_order, created_at, updated_at)
-            VALUES (:name, :brand, :category, :size, :price, :description, :notes, :occasion, :image_filename, :is_featured, :is_active, :sort_order, :created_at, :updated_at)
+            (name, brand, category, size, sku, scent_family, stock_qty, low_stock_threshold, price, description, notes, occasion, image_filename, is_featured, is_active, sort_order, created_at, updated_at)
+            VALUES (:name, :brand, :category, :size, :sku, :scent_family, :stock_qty, :low_stock_threshold, :price, :description, :notes, :occasion, :image_filename, :is_featured, :is_active, :sort_order, :created_at, :updated_at)
             """,
             {**data, "created_at": now_iso()}
         )
@@ -500,9 +636,9 @@ def export_products():
     products = get_db().execute("SELECT * FROM products ORDER BY sort_order ASC, name ASC").fetchall()
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Name", "Brand", "Category", "Size", "Price", "Notes", "Occasion", "Featured", "Active"])
+    writer.writerow(["Name", "Brand", "Category", "Size", "SKU", "Scent Family", "Stock", "Low Stock Threshold", "Price", "Notes", "Occasion", "Featured", "Active"])
     for p in products:
-        writer.writerow([p["name"], p["brand"], p["category"], p["size"], p["price"], p["notes"], p["occasion"], p["is_featured"], p["is_active"]])
+        writer.writerow([p["name"], p["brand"], p["category"], p["size"], p["sku"], p["scent_family"], p["stock_qty"], p["low_stock_threshold"], p["price"], p["notes"], p["occasion"], p["is_featured"], p["is_active"]])
     return Response(output.getvalue(), mimetype="text/csv", headers={"Content-Disposition": "attachment; filename=scent-library-products.csv"})
 
 
@@ -516,8 +652,12 @@ def admin_orders():
         get_db().commit()
         flash("Order status updated.", "success")
         return redirect(url_for("admin_orders"))
-    orders = get_db().execute("SELECT * FROM order_requests ORDER BY created_at DESC").fetchall()
-    return render_template("admin/orders.html", orders=orders)
+    status_filter = request.args.get("status", "").strip()
+    if status_filter:
+        orders = get_db().execute("SELECT * FROM order_requests WHERE status = ? ORDER BY created_at DESC", (status_filter,)).fetchall()
+    else:
+        orders = get_db().execute("SELECT * FROM order_requests ORDER BY created_at DESC").fetchall()
+    return render_template("admin/orders.html", orders=orders, status_filter=status_filter)
 
 
 @app.route("/admin/orders/<int:order_id>/delete", methods=["POST"])
@@ -585,7 +725,12 @@ def admin_settings():
     if request.method == "POST":
         db = get_db()
         for key in keys:
-            db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, request.form.get(key, "").strip()))
+            value = request.form.get(key, "").strip()
+            exists = db.execute("SELECT 1 FROM settings WHERE key = ?", (key,)).fetchone()
+            if exists:
+                db.execute("UPDATE settings SET value = ? WHERE key = ?", (value, key))
+            else:
+                db.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
         db.commit()
         flash("Settings saved.", "success")
         return redirect(url_for("admin_settings"))

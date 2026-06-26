@@ -2,33 +2,77 @@
 {% block content %}
 <div class="admin-header">
   <div>
-    <h1>Products</h1>
-    <p>Manage perfume catalogue, prices, photos and visibility.</p>
+    <h1>Business dashboard</h1>
+    <p>Manage products, stock, requests and photos from one place.</p>
   </div>
   <div class="header-actions">
     <a class="button secondary" href="{{ url_for('export_products') }}">Export CSV</a>
     <a class="button" href="{{ url_for('admin_product_new') }}">+ Add product</a>
   </div>
 </div>
-<div class="stats four">
+
+<div class="stats six">
   <div><strong>{{ stats.total }}</strong><span>Total products</span></div>
   <div><strong>{{ stats.active }}</strong><span>Active</span></div>
   <div><strong>{{ stats.featured }}</strong><span>Featured</span></div>
   <div><strong>{{ stats.orders }}</strong><span>New requests</span></div>
+  <div><strong>{{ stats.low_stock }}</strong><span>Low stock</span></div>
+  <div><strong>{{ stats.out_of_stock }}</strong><span>Out of stock</span></div>
 </div>
-<div class="table-wrap">
+
+<div class="dashboard-grid">
+  <section class="admin-panel">
+    <div class="panel-title"><h2>Low stock alerts</h2><a href="#products-table">View products</a></div>
+    {% if low_stock %}
+      <div class="mini-list">
+        {% for p in low_stock %}
+          <div class="mini-row">
+            <span>{{ p.name }}</span>
+            <strong class="{% if p.stock_qty <= 0 %}danger-text{% else %}warn-text{% endif %}">{{ p.stock_qty }} left</strong>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">No low stock products.</p>
+    {% endif %}
+  </section>
+
+  <section class="admin-panel">
+    <div class="panel-title"><h2>Latest requests</h2><a href="{{ url_for('admin_orders') }}">Open</a></div>
+    {% if recent_orders %}
+      <div class="mini-list">
+        {% for o in recent_orders %}
+          <div class="mini-row">
+            <span>{{ o.customer_name }} <small>{{ o.product_name or 'General request' }}</small></span>
+            <strong>{{ o.status }}</strong>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">No customer requests yet.</p>
+    {% endif %}
+  </section>
+</div>
+
+<div class="table-wrap" id="products-table">
 <table>
-  <thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Featured</th><th>Status</th><th>Actions</th></tr></thead>
+  <thead><tr><th>Product</th><th>Category</th><th>Family</th><th>Stock</th><th>Price</th><th>Featured</th><th>Status</th><th>Actions</th></tr></thead>
   <tbody>
   {% for p in products %}
     <tr>
       <td>
         <div class="product-cell">
           {% if p.image_filename %}<img src="{{ image_url(p.image_filename) }}" alt="">{% else %}<span class="tiny-placeholder">✧</span>{% endif %}
-          <div><strong>{{ p.name }}</strong><small>{{ p.brand }} · order {{ p.sort_order }}</small></div>
+          <div><strong>{{ p.name }}</strong><small>{{ p.brand }} · {{ p.sku or 'No SKU' }} · order {{ p.sort_order }}</small></div>
         </div>
       </td>
       <td>{{ p.category }}</td>
+      <td>{{ p.scent_family or '-' }}</td>
+      <td>
+        {% if p.stock_qty <= 0 %}<span class="pill inactive">Out</span>
+        {% elif p.stock_qty <= p.low_stock_threshold %}<span class="pill warning">{{ p.stock_qty }} low</span>
+        {% else %}<span class="pill active">{{ p.stock_qty }} in stock</span>{% endif %}
+      </td>
       <td>{{ currency }} {{ "%.0f"|format(p.price) }}</td>
       <td>{% if p.is_featured %}<span class="pill active">Yes</span>{% else %}<span class="pill neutral">No</span>{% endif %}</td>
       <td>{% if p.is_active %}<span class="pill active">Active</span>{% else %}<span class="pill inactive">Hidden</span>{% endif %}</td>

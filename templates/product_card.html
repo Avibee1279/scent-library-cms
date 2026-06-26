@@ -1,4 +1,4 @@
-<article class="product-card card-reveal">
+<article class="product-card card-reveal {% if product.stock_qty is defined and product.stock_qty <= 0 %}out{% endif %}">
   <a class="product-image" href="{{ url_for('product_detail', product_id=product.id, slug=slugify(product.name)) }}">
     {% if product.image_filename %}
       <img src="{{ image_url(product.image_filename) }}" alt="{{ product.name }}">
@@ -6,16 +6,34 @@
       <span class="placeholder-bottle">✧</span>
     {% endif %}
     {% if product.is_featured %}<span class="badge">Featured</span>{% endif %}
+    {% if product.stock_qty is defined and product.stock_qty <= 0 %}
+      <span class="stock-ribbon sold">Out of stock</span>
+    {% elif product.stock_qty is defined and product.stock_qty <= product.low_stock_threshold %}
+      <span class="stock-ribbon low">Low stock</span>
+    {% endif %}
   </a>
   <div class="product-body">
     <div class="product-meta"><span>{{ product.category }}</span><span>{{ product.size }}</span></div>
     <h3><a href="{{ url_for('product_detail', product_id=product.id, slug=slugify(product.name)) }}">{{ product.name }}</a></h3>
     <p class="brand-name">{{ product.brand }}</p>
+    {% if product.scent_family %}<p class="family-chip">{{ product.scent_family }}</p>{% endif %}
     <p>{{ product.description }}</p>
     {% if product.notes %}<p class="notes"><strong>Notes:</strong> {{ product.notes }}</p>{% endif %}
+    <div class="stock-line">
+      {% if product.stock_qty is defined and product.stock_qty > 0 %}
+        {{ product.stock_qty }} in stock
+      {% else %}
+        Ask for restock
+      {% endif %}
+      {% if product.sku %}<span>· {{ product.sku }}</span>{% endif %}
+    </div>
     <div class="product-bottom">
       <strong>{{ currency }} {{ "%.0f"|format(product.price) }}</strong>
-      <a class="btn whatsapp" href="https://wa.me/{{ whatsapp_number }}?text={{ quote_plus('Hi, I am interested in ' ~ product.name ~ ' ' ~ (product.size or '') ~ '. Is it available?') }}" target="_blank" rel="noopener">WhatsApp</a>
+      {% if product.stock_qty is defined and product.stock_qty <= 0 %}
+        <a class="btn whatsapp muted" href="https://wa.me/{{ whatsapp_number }}?text={{ quote_plus('Hi, I want to know when ' ~ product.name ~ ' will be available again.') }}" target="_blank" rel="noopener">Restock?</a>
+      {% else %}
+        <a class="btn whatsapp" href="https://wa.me/{{ whatsapp_number }}?text={{ quote_plus('Hi, I am interested in ' ~ product.name ~ ' ' ~ (product.size or '') ~ '. Is it available?') }}" target="_blank" rel="noopener">WhatsApp</a>
+      {% endif %}
     </div>
   </div>
 </article>

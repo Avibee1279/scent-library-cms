@@ -3,8 +3,15 @@
 <div class="admin-header">
   <div>
     <h1>Customer requests</h1>
-    <p>Requests submitted from the website form.</p>
+    <p>Track enquiries from the website and reply quickly on WhatsApp.</p>
   </div>
+</div>
+<div class="request-tabs">
+  <a href="{{ url_for('admin_orders') }}">All</a>
+  <a href="{{ url_for('admin_orders') }}?status=New">New</a>
+  <a href="{{ url_for('admin_orders') }}?status=Contacted">Contacted</a>
+  <a href="{{ url_for('admin_orders') }}?status=Completed">Completed</a>
+  <a href="{{ url_for('admin_orders') }}?status=Cancelled">Cancelled</a>
 </div>
 <div class="cards-list">
   {% for o in orders %}

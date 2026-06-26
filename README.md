@@ -1,134 +1,65 @@
-# The Scent Library - Custom CMS
+# The Scent Library CMS - Business Upgrade
 
-A complete starter CMS for a perfume catalogue website.
+This is the upgraded CMS for The Scent Library.
 
-## What is included
+## Stack
 
-- Public mobile-friendly perfume website
-- Smooth scrolling / fade-in animations
-- Product catalogue with search and category filters
-- Product detail pages
-- WhatsApp order buttons for each perfume
-- Quick request form that saves customer enquiries
-- Admin login
-- Add / edit / delete products
-- Upload perfume photos
-- Mark products as featured or hidden
-- Set product order
-- Manage layering combos
-- View and update customer requests
-- Website settings page
-- Change admin password
-- Export products as CSV
-- SQLite database
-- Ready for Render/Railway-style Python hosting
+- Flask / Python backend
+- PostgreSQL using `DATABASE_URL` on Render/Neon
+- SQLite fallback for local testing
+- Cloudinary product photo uploads
+- Render deployment ready
 
-## Default admin login
+## New in this version
 
-Admin URL:
+- Stock quantity per product
+- Low-stock alerts on admin dashboard
+- Out-of-stock display on public website
+- SKU/code per product
+- Scent family filter on public catalogue
+- Better admin dashboard with latest requests
+- Request status filters: New, Contacted, Completed, Cancelled
+- Product CSV export includes stock/SKU/family
+- Sitemap and robots.txt routes for SEO
+
+## Render environment variables
+
+Keep these in Render, not GitHub:
+
+```text
+DATABASE_URL=your Neon PostgreSQL connection string
+CLOUDINARY_CLOUD_NAME=your Cloudinary cloud name
+CLOUDINARY_API_KEY=your Cloudinary API key
+CLOUDINARY_API_SECRET=your Cloudinary API secret
+SECRET_KEY=any long random string
+```
+
+## Deploy
+
+Build command:
+
+```bash
+pip install -r requirements.txt
+```
+
+Start command:
+
+```bash
+gunicorn app:app
+```
+
+## Admin
+
+Open:
 
 ```text
 /admin
 ```
 
-Default login:
+Default login if your database is new:
 
 ```text
-Username: admin
-Password: admin123
+admin / admin123
 ```
 
-Change this password before putting the website online.
-
-## Run locally on Windows
-
-Open Command Prompt in this folder and run:
-
-```bash
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-python app.py
-```
-
-Then open:
-
-```text
-http://127.0.0.1:5000
-```
-
-Admin panel:
-
-```text
-http://127.0.0.1:5000/admin
-```
-
-## Run locally on Mac/Linux
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python app.py
-```
-
-## How the business owner uses it
-
-1. Go to `/admin`
-2. Login
-3. Go to **Products**
-4. Click **Add product**
-5. Enter perfume name, price, size, notes and upload photo
-6. Save
-7. The product appears on the website automatically
-
-## Important before going live
-
-Do these before using it for a real client:
-
-1. Change the admin password.
-2. Set a strong `SECRET_KEY` environment variable on the hosting platform.
-3. Use a persistent disk or managed database if hosting online.
-4. Make regular backups of `scent_library.db` and `static/uploads`.
-5. Replace the default WhatsApp number in **Admin → Settings**.
-
-## Deployment idea
-
-This is not a static HTML site. It needs Python/Flask hosting.
-
-Good hosting choices:
-
-- Render
-- Railway
-- PythonAnywhere
-- A VPS
-
-For Render/Railway-style hosting, use:
-
-```text
-Build command: pip install -r requirements.txt
-Start command: gunicorn app:app
-```
-
-For local testing, use:
-
-```bash
-python app.py
-```
-
-## Cloudinary permanent photo upload
-
-This version can upload product photos to Cloudinary so uploaded photos do not disappear when hosted on services with temporary storage.
-
-Add these Environment Variables in Render:
-
-```text
-CLOUDINARY_CLOUD_NAME=your_cloud_name
-CLOUDINARY_API_KEY=your_api_key
-CLOUDINARY_API_SECRET=your_api_secret
-SECRET_KEY=change-this-to-a-long-random-secret
-```
-
-Then redeploy. Product photos uploaded from the admin panel will be stored in Cloudinary.
-
-Important: the default SQLite database is still local. For full production use, use PostgreSQL or a paid persistent disk so product details also remain safe after redeploy/restart.
+Change the password after login.

@@ -1,13 +1,15 @@
 {% extends "admin/base_admin.html" %}
 {% block content %}
 <div class="admin-header">
-  <div><h1>{{ action }}</h1><p>Add photos, price, notes and WhatsApp catalogue details.</p></div>
+  <div><h1>{{ action }}</h1><p>Add photos, stock, price, notes and WhatsApp catalogue details.</p></div>
   <a class="button secondary" href="{{ url_for('admin_dashboard') }}">Back</a>
 </div>
 <form class="form-grid" method="post" enctype="multipart/form-data">
   <input type="hidden" name="existing_image" value="{{ product.image_filename if product else '' }}">
   <label>Name<input name="name" value="{{ product.name if product else '' }}" required></label>
   <label>Brand / Inspiration<input name="brand" value="{{ product.brand if product else '' }}"></label>
+  <label>SKU / code<input name="sku" placeholder="SKU-001" value="{{ product.sku if product else '' }}"></label>
+  <label>Scent family<input name="scent_family" placeholder="Fresh Citrus, Oud, Vanilla..." value="{{ product.scent_family if product else '' }}"></label>
   <label>Category
     <select name="category">
       {% for c in ['Men','Women','Unisex'] %}
@@ -18,7 +20,9 @@
   <label>Size<input name="size" placeholder="50ml" value="{{ product.size if product else '' }}"></label>
   <label>Price<input type="number" step="0.01" name="price" value="{{ product.price if product else 0 }}"></label>
   <label>Sort order<input type="number" name="sort_order" value="{{ product.sort_order if product else 0 }}"></label>
-  <label>Occasion<input name="occasion" value="{{ product.occasion if product else '' }}"></label>
+  <label>Stock quantity<input type="number" name="stock_qty" value="{{ product.stock_qty if product else 0 }}"></label>
+  <label>Low stock alert at<input type="number" name="low_stock_threshold" value="{{ product.low_stock_threshold if product else 2 }}"></label>
+  <label class="wide">Occasion<input name="occasion" value="{{ product.occasion if product else '' }}"></label>
   <label class="wide">Description<textarea name="description" rows="4">{{ product.description if product else '' }}</textarea></label>
   <label class="wide">Notes<textarea name="notes" rows="3">{{ product.notes if product else '' }}</textarea></label>
   <label class="wide">Photo<input type="file" name="image" accept="image/*"></label>

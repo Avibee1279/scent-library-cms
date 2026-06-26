@@ -12,12 +12,25 @@
     <p class="eyebrow">{{ product.category }} · {{ product.size }}</p>
     <h1>{{ product.name }}</h1>
     <p class="brand-name">{{ product.brand }}</p>
+    {% if product.scent_family %}<p class="family-chip detail-chip">{{ product.scent_family }}</p>{% endif %}
     <p>{{ product.description }}</p>
     {% if product.notes %}<p><strong>Notes:</strong> {{ product.notes }}</p>{% endif %}
     {% if product.occasion %}<p><strong>Occasion:</strong> {{ product.occasion }}</p>{% endif %}
+    {% if product.sku %}<p><strong>SKU:</strong> {{ product.sku }}</p>{% endif %}
+    <div class="stock-box {% if product.stock_qty <= 0 %}sold{% elif product.stock_qty <= product.low_stock_threshold %}low{% endif %}">
+      {% if product.stock_qty > 0 %}
+        {{ product.stock_qty }} available
+      {% else %}
+        Out of stock — ask for restock
+      {% endif %}
+    </div>
     <div class="price-line">{{ currency }} {{ "%.0f"|format(product.price) }}</div>
     <div class="hero-actions">
-      <a class="btn primary" href="https://wa.me/{{ whatsapp_number }}?text={{ quote_plus('Hi, I want to order ' ~ product.name ~ ' ' ~ (product.size or '') ~ '.') }}" target="_blank" rel="noopener">Order on WhatsApp</a>
+      {% if product.stock_qty > 0 %}
+        <a class="btn primary" href="https://wa.me/{{ whatsapp_number }}?text={{ quote_plus('Hi, I want to order ' ~ product.name ~ ' ' ~ (product.size or '') ~ '.') }}" target="_blank" rel="noopener">Order on WhatsApp</a>
+      {% else %}
+        <a class="btn primary" href="https://wa.me/{{ whatsapp_number }}?text={{ quote_plus('Hi, please tell me when ' ~ product.name ~ ' is back in stock.') }}" target="_blank" rel="noopener">Ask for restock</a>
+      {% endif %}
       <a class="btn ghost" href="{{ url_for('index') }}#products">Back to catalogue</a>
     </div>
     <form class="request-card mini" method="post" action="{{ url_for('order_request') }}">

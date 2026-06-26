@@ -15,6 +15,7 @@
     <div class="bottle">✦</div>
     <h3>New drops</h3>
     <p>Premium inspired fragrances, layering ideas and gift sets.</p>
+    <div class="mini-points"><span>Cloud photos</span><span>Live stock</span><span>Quick order</span></div>
   </div>
 </header>
 
@@ -42,11 +43,16 @@
     </div>
   </div>
 
-  <form class="filters" method="get" action="{{ url_for('index') }}#products">
-    <input type="search" name="q" placeholder="Search perfume, notes, brand..." value="{{ q }}">
+  <form class="filters enhanced" method="get" action="{{ url_for('index') }}#products">
+    <input type="search" name="q" placeholder="Search perfume, notes, brand, SKU..." value="{{ q }}">
     <select name="category">
       {% for c in categories %}
         <option value="{{ c }}" {% if selected_category == c %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+    <select name="family">
+      {% for f in families %}
+        <option value="{{ f }}" {% if selected_family == f %}selected{% endif %}>{{ f }}</option>
       {% endfor %}
     </select>
     <button class="btn small" type="submit">Search</button>
