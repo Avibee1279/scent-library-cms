@@ -323,27 +323,32 @@ def init_db():
 
         product_count = conn.execute(text("SELECT COUNT(*) AS c FROM products")).mappings().fetchone()["c"]
         if product_count == 0:
+            # Seed demo products. Include all non-null stock columns explicitly so
+            # PostgreSQL does not reject the insert when raw SQL is used.
             samples = [
-                ("Amber Oud Carbon Edition", "Al Haramain", "Men", "60ml", 1500, "Fresh, aromatic and modern. Good for office and evening wear.", "bergamot, lavender, woods", "Office / Night", None, 1, 1, 1),
-                ("Khamrah Waha", "Lattafa", "Unisex", "100ml", 1800, "Sweet, warm and addictive. Perfect for colder evenings and special occasions.", "dates, vanilla, amber", "Evening", None, 1, 1, 2),
-                ("Pacific Chill Inspiration", "The Scent Library", "Unisex", "50ml", 900, "Fresh citrus scent with a clean summer feeling.", "citrus, mint, musk", "Summer / Day", None, 1, 1, 3),
-                ("Ombre Nomade Inspiration", "The Scent Library", "Unisex", "50ml", 950, "Deep oud style fragrance for strong projection.", "oud, rose, incense", "Night / Special Occasion", None, 0, 1, 4),
-                ("Invictus Parfum Inspiration", "The Scent Library", "Men", "50ml", 850, "Sporty, clean and powerful masculine scent.", "marine notes, woods, amber", "Daily", None, 0, 1, 5),
-                ("Kayali Inspired Mini Set", "The Scent Library", "Women", "5 x 10ml", 1200, "A discovery set for layering and gifting.", "vanilla, musk, fruits", "Gift / Layering", None, 1, 1, 6),
+                ("Amber Oud Carbon Edition", "Al Haramain", "Men", "60ml", "AOC-60", "Fresh / Aromatic", 5, 2, 1500, "Fresh, aromatic and modern. Good for office and evening wear.", "bergamot, lavender, woods", "Office / Night", None, 1, 1, 1),
+                ("Khamrah Waha", "Lattafa", "Unisex", "100ml", "KW-100", "Sweet / Amber", 5, 2, 1800, "Sweet, warm and addictive. Perfect for colder evenings and special occasions.", "dates, vanilla, amber", "Evening", None, 1, 1, 2),
+                ("Pacific Chill Inspiration", "The Scent Library", "Unisex", "50ml", "PC-50", "Fresh / Citrus", 5, 2, 900, "Fresh citrus scent with a clean summer feeling.", "citrus, mint, musk", "Summer / Day", None, 1, 1, 3),
+                ("Ombre Nomade Inspiration", "The Scent Library", "Unisex", "50ml", "ON-50", "Oud / Rose", 5, 2, 950, "Deep oud style fragrance for strong projection.", "oud, rose, incense", "Night / Special Occasion", None, 0, 1, 4),
+                ("Invictus Parfum Inspiration", "The Scent Library", "Men", "50ml", "IP-50", "Fresh / Sport", 5, 2, 850, "Sporty, clean and powerful masculine scent.", "marine notes, woods, amber", "Daily", None, 0, 1, 5),
+                ("Kayali Inspired Mini Set", "The Scent Library", "Women", "5 x 10ml", "KAY-SET", "Sweet / Fruity", 5, 2, 1200, "A discovery set for layering and gifting.", "vanilla, musk, fruits", "Gift / Layering", None, 1, 1, 6),
             ]
             for p in samples:
                 conn.execute(
                     text("""
                         INSERT INTO products
-                        (name, brand, category, size, price, description, notes, occasion, image_filename,
+                        (name, brand, category, size, sku, scent_family, stock_qty, low_stock_threshold,
+                         price, description, notes, occasion, image_filename,
                          is_featured, is_active, sort_order, created_at, updated_at)
-                        VALUES (:name, :brand, :category, :size, :price, :description, :notes, :occasion, :image_filename,
+                        VALUES (:name, :brand, :category, :size, :sku, :scent_family, :stock_qty, :low_stock_threshold,
+                                :price, :description, :notes, :occasion, :image_filename,
                                 :is_featured, :is_active, :sort_order, :created_at, :updated_at)
                     """),
                     {
-                        "name": p[0], "brand": p[1], "category": p[2], "size": p[3], "price": p[4],
-                        "description": p[5], "notes": p[6], "occasion": p[7], "image_filename": p[8],
-                        "is_featured": p[9], "is_active": p[10], "sort_order": p[11],
+                        "name": p[0], "brand": p[1], "category": p[2], "size": p[3], "sku": p[4],
+                        "scent_family": p[5], "stock_qty": p[6], "low_stock_threshold": p[7], "price": p[8],
+                        "description": p[9], "notes": p[10], "occasion": p[11], "image_filename": p[12],
+                        "is_featured": p[13], "is_active": p[14], "sort_order": p[15],
                         "created_at": now_iso(), "updated_at": now_iso(),
                     },
                 )
