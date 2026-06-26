@@ -1,17 +1,29 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="product-detail section section-reveal">
-  <div class="detail-image">
-    {% if product.image_filename %}
-      <img class="main-detail-img" src="{{ image_url(product.image_filename) }}" alt="{{ product.name }}">
-    {% else %}
-      <span class="placeholder-bottle big">✧</span>
-    {% endif %}
-    {% if gallery %}
-      <div class="detail-gallery">
-        {% if product.image_filename %}<img src="{{ image_url(product.image_filename) }}" alt="{{ product.name }}">{% endif %}
+  <div class="detail-image product-gallery-widget">
+    <div class="main-image-wrap">
+      {% if product.image_filename %}
+        <img id="mainGalleryImage" class="main-detail-img" src="{{ image_url(product.image_filename) }}" alt="{{ product.name }}">
+      {% else %}
+        <span class="placeholder-bottle big">✧</span>
+      {% endif %}
+      {% if product.image_filename or gallery %}
+        <button class="gallery-nav prev" type="button" aria-label="Previous image">‹</button>
+        <button class="gallery-nav next" type="button" aria-label="Next image">›</button>
+      {% endif %}
+    </div>
+    {% if product.image_filename or gallery %}
+      <div class="detail-gallery" id="detailGalleryThumbs" aria-label="Product image gallery">
+        {% if product.image_filename %}
+          <button class="gallery-thumb active" type="button" data-full="{{ image_url(product.image_filename) }}" aria-label="Show main product photo">
+            <img src="{{ image_url(product.image_filename) }}" alt="{{ product.name }}">
+          </button>
+        {% endif %}
         {% for img in gallery %}
-          <img src="{{ image_url(img.image_url) }}" alt="{{ product.name }} gallery">
+          <button class="gallery-thumb" type="button" data-full="{{ image_url(img.image_url) }}" aria-label="Show gallery photo {{ loop.index }}">
+            <img src="{{ image_url(img.image_url) }}" alt="{{ product.name }} gallery {{ loop.index }}">
+          </button>
         {% endfor %}
       </div>
     {% endif %}
