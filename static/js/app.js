@@ -201,17 +201,20 @@ function showToast(message){
   const previewImg = overlay.querySelector('img');
 
   let hideTimer = null;
+  let showTimer = null;
   function show(trigger){
     const src = trigger.dataset.fullImage || (trigger.querySelector('img') ? trigger.querySelector('img').src : '');
     if(!src) return;
     window.clearTimeout(hideTimer);
+    window.clearTimeout(showTimer);
     previewImg.src = src;
     previewImg.alt = trigger.dataset.fullName || 'Full product photo';
     caption.textContent = trigger.dataset.fullName || 'Full product photo';
-    overlay.classList.add('show');
+    showTimer = window.setTimeout(() => overlay.classList.add('show'), 120);
   }
   function hide(){
-    hideTimer = window.setTimeout(() => overlay.classList.remove('show'), 80);
+    window.clearTimeout(showTimer);
+    hideTimer = window.setTimeout(() => overlay.classList.remove('show'), 90);
   }
   triggers.forEach(trigger => {
     trigger.addEventListener('mouseenter', () => show(trigger));

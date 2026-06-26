@@ -65,3 +65,9 @@ Recommended logo format: transparent PNG, around 400 x 120 px. The logo is uploa
 
 ## Update: Full photo hover preview
 Product cards now keep the boutique crop in normal view, but on desktop hover a large overlay preview shows the full original photo.
+
+
+## Soft hover preview update
+- Product image hover preview is smaller, centered, semi-transparent, and fades in smoothly.
+- Normal product card crop is unchanged.
+- Cache-buster updated to `soft-preview-2`.
