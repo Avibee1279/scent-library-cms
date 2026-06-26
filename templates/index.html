@@ -1,30 +1,42 @@
 {% extends "base.html" %}
 {% block content %}
-<header class="hero section-reveal">
+<header class="hero luxe-hero section-reveal">
   <div class="hero-content">
-    <p class="eyebrow">Perfume catalogue · Mauritius</p>
+    <p class="eyebrow">Perfume boutique · Mauritius</p>
     <h1>{{ hero_title }}</h1>
     <p>{{ tagline }}</p>
-    <div class="notice">{{ homepage_notice }}</div>
     <div class="hero-actions">
-      <a class="btn primary" href="#products">View perfumes</a>
-      <a class="btn ghost" href="https://wa.me/{{ whatsapp_number }}?text={{ quote_plus('Hi, I want to know more about The Scent Library perfumes.') }}" target="_blank" rel="noopener">WhatsApp us</a>
+      <a class="btn primary" href="#products">Shop perfumes</a>
+      <a class="btn ghost" href="#collections">Explore collections</a>
+    </div>
+    <div class="trust-row">
+      <span>Cloud photo catalogue</span>
+      <span>Live stock</span>
+      <span>WhatsApp ordering</span>
     </div>
   </div>
-  <div class="hero-card float-card">
-    <div class="bottle">✦</div>
-    <h3>New drops</h3>
-    <p>Premium inspired fragrances, layering ideas and gift sets.</p>
-    <div class="mini-points"><span>Cloud photos</span><span>Live stock</span><span>Quick order</span></div>
+  <div class="hero-visual">
+    <div class="hero-frame hero-frame-main">
+      {% if featured and featured[0].image_filename %}
+        <img src="{{ image_url(featured[0].image_filename) }}" alt="{{ featured[0].name }}">
+      {% else %}
+        <div class="lux-bottle">✦</div>
+      {% endif %}
+    </div>
+    <div class="hero-mini-card">
+      <p class="eyebrow">This week</p>
+      <h3>Curated scent edits</h3>
+      <p>Fresh, oud, sweet and gift-ready fragrances selected for your mood.</p>
+    </div>
   </div>
 </header>
 
 {% if banners %}
-<section class="promo-strip section-reveal">
-  {% for banner in banners %}
-    <div class="promo-card">
+<section class="editorial-banners section-reveal">
+  {% for banner in banners[:2] %}
+    <article class="editorial-card {% if loop.first %}wide{% endif %}">
       {% if banner.image_url %}<img src="{{ image_url(banner.image_url) }}" alt="{{ banner.title }}">{% endif %}
-      <div>
+      <div class="editorial-copy">
         <p class="eyebrow">Promotion</p>
         <h2>{{ banner.title }}</h2>
         <p>{{ banner.subtitle }}</p>
@@ -32,20 +44,34 @@
           <a class="btn small" href="{{ banner.button_link or '#products' }}">{{ banner.button_text }}</a>
         {% endif %}
       </div>
-    </div>
+    </article>
   {% endfor %}
 </section>
 {% endif %}
 
-{% if featured %}
-<section class="section section-reveal">
-  <div class="section-title">
-    <div>
-      <p class="eyebrow">Featured</p>
-      <h2>Best sellers</h2>
-    </div>
+<section class="section collection-section section-reveal" id="collections">
+  <div class="section-title centered">
+    <p class="eyebrow">Shop by mood</p>
+    <h2>Collections made for how you want to smell.</h2>
   </div>
-  <div class="product-grid featured-grid">
+  <div class="collection-grid">
+    <a class="collection-tile" href="{{ url_for('index', family='Fresh / Citrus') }}#products"><span>Fresh & Clean</span><small>Daytime, office, summer</small></a>
+    <a class="collection-tile" href="{{ url_for('index', family='Oud / Rose') }}#products"><span>Oud Collection</span><small>Bold, deep, statement</small></a>
+    <a class="collection-tile" href="{{ url_for('index', family='Sweet / Amber') }}#products"><span>Sweet Amber</span><small>Warm, evening, attractive</small></a>
+    <a class="collection-tile" href="{{ url_for('index', category='Unisex') }}#products"><span>Gift Ideas</span><small>Easy choices for everyone</small></a>
+  </div>
+</section>
+
+{% if featured %}
+<section class="section section-reveal" id="bestsellers">
+  <div class="section-title shop-title">
+    <div>
+      <p class="eyebrow">Our best sellers</p>
+      <h2>Most wanted now</h2>
+    </div>
+    <a class="text-link" href="#products">Show more</a>
+  </div>
+  <div class="product-grid featured-grid luxe-grid">
     {% for product in featured %}
       {% include "product_card.html" %}
     {% endfor %}
@@ -53,15 +79,23 @@
 </section>
 {% endif %}
 
+<section class="story-band section-reveal">
+  <div>
+    <p class="eyebrow">The scent library edit</p>
+    <h2>A catalogue that feels like a boutique.</h2>
+  </div>
+  <p>Discover perfumes by mood, occasion and scent family. Build a request basket, ask for availability, or message us directly on WhatsApp for advice.</p>
+</section>
+
 <section class="section section-reveal" id="products">
-  <div class="section-title">
+  <div class="section-title shop-title">
     <div>
       <p class="eyebrow">Catalogue</p>
-      <h2>Perfumes</h2>
+      <h2>Shop the collection</h2>
     </div>
   </div>
 
-  <form class="filters enhanced" method="get" action="{{ url_for('index') }}#products">
+  <form class="filters luxe-filters" method="get" action="{{ url_for('index') }}#products">
     <input type="search" name="q" placeholder="Search perfume, notes, brand, SKU..." value="{{ q }}">
     <select name="category">
       {% for c in categories %}
@@ -76,7 +110,7 @@
     <button class="btn small" type="submit">Search</button>
   </form>
 
-  <div class="product-grid">
+  <div class="product-grid luxe-grid">
     {% for product in products %}
       {% include "product_card.html" %}
     {% else %}
@@ -85,13 +119,14 @@
   </div>
 </section>
 
-<section class="section split section-reveal" id="layering">
+<section class="section split layering-luxe section-reveal" id="layering">
   <div>
-    <p class="eyebrow">Layering combos</p>
-    <h2>Help customers choose better.</h2>
+    <p class="eyebrow">Layering atelier</p>
+    <h2>Layering ideas for better scent stories.</h2>
     <p>Suggest combinations for office, night out, gifting and special occasions. You can change these combos from the admin panel.</p>
+    <a class="btn ghost" href="https://wa.me/{{ whatsapp_number }}?text={{ quote_plus('Hi, can you suggest a perfume layering combo for me?') }}" target="_blank" rel="noopener">Ask for a combo</a>
   </div>
-  <div class="combo-list">
+  <div class="combo-list luxe-combos">
     {% for combo in combos %}
       <div class="combo-card">
         <div>
@@ -105,7 +140,7 @@
 </section>
 
 <section class="section section-reveal" id="contact">
-  <div class="contact-grid">
+  <div class="contact-grid luxe-contact">
     <div class="contact-card">
       <p class="eyebrow">Delivery & payment</p>
       <h2>Order easily on WhatsApp.</h2>
@@ -116,7 +151,7 @@
       </div>
     </div>
     <form class="request-card" method="post" action="{{ url_for('order_request') }}">
-      <p class="eyebrow">Quick request</p>
+      <p class="eyebrow">Concierge request</p>
       <h3>Ask for availability</h3>
       <input name="customer_name" placeholder="Your name" required>
       <input name="phone" placeholder="Phone / WhatsApp number" required>

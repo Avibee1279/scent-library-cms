@@ -1,11 +1,14 @@
-<article class="product-card card-reveal {% if product.stock_qty is defined and product.stock_qty <= 0 %}out{% endif %}">
+<article class="product-card luxe-product card-reveal {% if product.stock_qty is defined and product.stock_qty <= 0 %}out{% endif %}" data-product-card="{{ product.id }}">
+  <div class="card-actions-floating">
+    <button class="mini-icon wishlist-toggle" type="button" aria-label="Add to wishlist" data-id="{{ product.id }}" data-name="{{ product.name }}">♡</button>
+  </div>
   <a class="product-image" href="{{ url_for('product_detail', product_id=product.id, slug=slugify(product.name)) }}">
     {% if product.image_filename %}
       <img src="{{ image_url(product.image_filename) }}" alt="{{ product.name }}">
     {% else %}
       <span class="placeholder-bottle">✧</span>
     {% endif %}
-    {% if product.is_featured %}<span class="badge">Featured</span>{% endif %}
+    {% if product.is_featured %}<span class="badge">Best Seller</span>{% endif %}
     {% if product.stock_qty is defined and product.stock_qty <= 0 %}
       <span class="stock-ribbon sold">Out of stock</span>
     {% elif product.stock_qty is defined and product.stock_qty <= product.low_stock_threshold %}
@@ -17,7 +20,7 @@
     <h3><a href="{{ url_for('product_detail', product_id=product.id, slug=slugify(product.name)) }}">{{ product.name }}</a></h3>
     <p class="brand-name">{{ product.brand }}</p>
     {% if product.scent_family %}<p class="family-chip">{{ product.scent_family }}</p>{% endif %}
-    <p>{{ product.description }}</p>
+    <p class="product-desc">{{ product.description }}</p>
     {% if product.notes %}<p class="notes"><strong>Notes:</strong> {{ product.notes }}</p>{% endif %}
     <div class="stock-line">
       {% if product.stock_qty is defined and product.stock_qty > 0 %}
@@ -29,9 +32,20 @@
     </div>
     <div class="product-bottom">
       <strong>{{ currency }} {{ "%.0f"|format(product.price) }}</strong>
+      <a class="text-link" href="{{ url_for('product_detail', product_id=product.id, slug=slugify(product.name)) }}">View</a>
+    </div>
+    <div class="card-buy-row">
       {% if product.stock_qty is defined and product.stock_qty <= 0 %}
         <a class="btn whatsapp muted" href="{{ url_for('track_whatsapp_restock', product_id=product.id) }}" target="_blank" rel="noopener">Restock?</a>
       {% else %}
+        <button class="btn primary add-to-basket" type="button"
+          data-id="{{ product.id }}"
+          data-name="{{ product.name }}"
+          data-price="{{ '%.0f'|format(product.price) }}"
+          data-size="{{ product.size }}"
+          data-image="{% if product.image_filename %}{{ image_url(product.image_filename) }}{% endif %}">
+          Add to request
+        </button>
         <a class="btn whatsapp" href="{{ url_for('track_whatsapp_product', product_id=product.id) }}" target="_blank" rel="noopener">WhatsApp</a>
       {% endif %}
     </div>

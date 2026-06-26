@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ site_name }}</title>
   <meta name="description" content="{{ tagline }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 {% if google_analytics_id %}
   <script async src="https://www.googletagmanager.com/gtag/js?id={{ google_analytics_id }}"></script>
@@ -18,17 +21,25 @@
 </head>
 <body>
   <div class="top-progress" id="topProgress"></div>
-  <nav class="navbar">
+  <div class="announcement">{{ homepage_notice or 'New arrivals, gift sets and layering ideas now available.' }}</div>
+
+  <nav class="navbar luxe-nav">
     <a class="brand" href="{{ url_for('index') }}">
       <span class="brand-mark">SL</span>
-      <span>{{ site_name }}</span>
+      <span class="brand-text">{{ site_name }}</span>
     </a>
     <button class="mobile-menu" id="mobileMenu" aria-label="Open menu">☰</button>
     <div class="nav-links" id="navLinks">
-      <a href="{{ url_for('index') }}#products">Perfumes</a>
+      <a href="{{ url_for('index') }}#bestsellers">Best Sellers</a>
+      <a href="{{ url_for('index') }}#collections">Collections</a>
+      <a href="{{ url_for('index') }}#products">Shop</a>
       <a href="{{ url_for('index') }}#layering">Layering</a>
-      <a href="{{ url_for('index') }}#contact">Order</a>
+      <a href="{{ url_for('index') }}#contact">Contact</a>
       <a class="admin-link" href="{{ url_for('admin_dashboard') }}">Admin</a>
+    </div>
+    <div class="nav-actions">
+      <button class="icon-btn" id="wishlistBtn" type="button" aria-label="Wishlist">♡ <span id="wishlistCount">0</span></button>
+      <button class="icon-btn cart-btn" id="basketOpen" type="button" aria-label="Request basket">Bag <span id="basketCount">0</span></button>
     </div>
   </nav>
 
@@ -44,10 +55,51 @@
 
   {% block content %}{% endblock %}
 
-  <footer class="footer">
-    <p>{{ site_name }} · {{ business_address }} · <a href="{{ instagram_url }}" target="_blank" rel="noopener">Instagram</a></p>
+  <section class="newsletter-strip section-reveal">
+    <div>
+      <p class="eyebrow">Stay in the scent circle</p>
+      <h2>New drops, offers and layering ideas.</h2>
+      <p>Follow us on Instagram or send us a WhatsApp message to reserve your next fragrance.</p>
+    </div>
+    <div class="hero-actions compact">
+      <a class="btn primary" href="https://wa.me/{{ whatsapp_number }}?text={{ quote_plus('Hi, please add me to The Scent Library updates.') }}" target="_blank" rel="noopener">WhatsApp updates</a>
+      <a class="btn ghost" href="{{ instagram_url }}" target="_blank" rel="noopener">Instagram</a>
+    </div>
+  </section>
+
+  <footer class="footer luxe-footer">
+    <div>
+      <strong>{{ site_name }}</strong>
+      <p>{{ business_address }} · <a href="{{ instagram_url }}" target="_blank" rel="noopener">Instagram</a></p>
+    </div>
     <p class="footer-note">{{ footer_note }}</p>
   </footer>
+
+  <div class="drawer-backdrop" id="basketBackdrop" hidden></div>
+  <aside class="basket-drawer" id="basketDrawer" aria-hidden="true">
+    <div class="drawer-head">
+      <div>
+        <p class="eyebrow">Request basket</p>
+        <h3>Your selected perfumes</h3>
+      </div>
+      <button class="drawer-close" id="basketClose" type="button">×</button>
+    </div>
+    <div class="basket-items" id="basketItems"></div>
+    <form class="basket-form" method="post" action="{{ url_for('order_request') }}">
+      <input type="hidden" name="product_name" value="Request basket">
+      <input type="hidden" name="message" id="basketMessage">
+      <input name="customer_name" placeholder="Your name" required>
+      <input name="phone" placeholder="Phone / WhatsApp number" required>
+      <input name="location" placeholder="Delivery area in Mauritius">
+      <textarea name="extra_note" id="basketExtraNote" rows="3" placeholder="Any note? Quantity, delivery time, gift wrapping..."></textarea>
+      <button class="btn primary full" type="submit">Send request</button>
+      <button class="btn ghost full" id="basketWhatsapp" type="button">Send on WhatsApp</button>
+    </form>
+  </aside>
+
+  <script>
+    window.SL_WHATSAPP = "{{ whatsapp_number }}";
+  </script>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

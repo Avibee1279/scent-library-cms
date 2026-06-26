@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="product-detail section section-reveal">
+<section class="product-detail luxe-detail section section-reveal">
   <div class="detail-image product-gallery-widget">
     <div class="main-image-wrap">
       {% if product.image_filename %}
@@ -28,15 +28,19 @@
       </div>
     {% endif %}
   </div>
-  <div class="detail-info">
+  <div class="detail-info luxe-detail-info">
     <p class="eyebrow">{{ product.category }} · {{ product.size }}</p>
     <h1>{{ product.name }}</h1>
     <p class="brand-name">{{ product.brand }}</p>
     {% if product.scent_family %}<p class="family-chip detail-chip">{{ product.scent_family }}</p>{% endif %}
     <p>{{ product.description }}</p>
-    {% if product.notes %}<p><strong>Notes:</strong> {{ product.notes }}</p>{% endif %}
-    {% if product.occasion %}<p><strong>Occasion:</strong> {{ product.occasion }}</p>{% endif %}
-    {% if product.sku %}<p><strong>SKU:</strong> {{ product.sku }}</p>{% endif %}
+
+    <div class="detail-notes-grid">
+      {% if product.notes %}<div><span>Notes</span><strong>{{ product.notes }}</strong></div>{% endif %}
+      {% if product.occasion %}<div><span>Occasion</span><strong>{{ product.occasion }}</strong></div>{% endif %}
+      {% if product.sku %}<div><span>SKU</span><strong>{{ product.sku }}</strong></div>{% endif %}
+    </div>
+
     <div class="stock-box {% if product.stock_qty <= 0 %}sold{% elif product.stock_qty <= product.low_stock_threshold %}low{% endif %}">
       {% if product.stock_qty > 0 %}
         {{ product.stock_qty }} available
@@ -47,7 +51,15 @@
     <div class="price-line">{{ currency }} {{ "%.0f"|format(product.price) }}</div>
     <div class="hero-actions">
       {% if product.stock_qty > 0 %}
-        <a class="btn primary" href="{{ url_for('track_whatsapp_product', product_id=product.id) }}" target="_blank" rel="noopener">Order on WhatsApp</a>
+        <button class="btn primary add-to-basket" type="button"
+          data-id="{{ product.id }}"
+          data-name="{{ product.name }}"
+          data-price="{{ '%.0f'|format(product.price) }}"
+          data-size="{{ product.size }}"
+          data-image="{% if product.image_filename %}{{ image_url(product.image_filename) }}{% endif %}">
+          Add to request basket
+        </button>
+        <a class="btn ghost" href="{{ url_for('track_whatsapp_product', product_id=product.id) }}" target="_blank" rel="noopener">WhatsApp now</a>
       {% else %}
         <a class="btn primary" href="{{ url_for('track_whatsapp_restock', product_id=product.id) }}" target="_blank" rel="noopener">Ask for restock</a>
       {% endif %}
@@ -56,7 +68,7 @@
     <form class="request-card mini" method="post" action="{{ url_for('order_request') }}">
       <input type="hidden" name="product_id" value="{{ product.id }}">
       <input type="hidden" name="product_name" value="{{ product.name }}">
-      <h3>Request availability</h3>
+      <h3>Concierge request</h3>
       <input name="customer_name" placeholder="Your name" required>
       <input name="phone" placeholder="Phone / WhatsApp number" required>
       <input name="location" placeholder="Location">
@@ -69,7 +81,7 @@
 {% if related %}
 <section class="section section-reveal">
   <div class="section-title"><div><p class="eyebrow">Similar</p><h2>You may also like</h2></div></div>
-  <div class="product-grid">
+  <div class="product-grid luxe-grid">
     {% for product in related %}
       {% include "product_card.html" %}
     {% endfor %}
