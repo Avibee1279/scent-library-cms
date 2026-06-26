@@ -71,3 +71,7 @@ Product cards now keep the boutique crop in normal view, but on desktop hover a 
 - Product image hover preview is smaller, centered, semi-transparent, and fades in smoothly.
 - Normal product card crop is unchanged.
 - Cache-buster updated to `soft-preview-2`.
+
+
+## No-popup hover update
+Product image hover now stays inside the product card. No large overlay/popup is opened.
