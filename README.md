@@ -61,3 +61,7 @@ New options:
 - Show/hide the site name next to the logo
 
 Recommended logo format: transparent PNG, around 400 x 120 px. The logo is uploaded to Cloudinary when Cloudinary environment variables are configured.
+
+
+## Update: Full photo hover preview
+Product cards now keep the boutique crop in normal view, but on desktop hover a large overlay preview shows the full original photo.

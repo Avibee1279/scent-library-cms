@@ -183,3 +183,40 @@ function showToast(message){
     startX = null;
   }, {passive:true});
 })();
+
+
+// Large full-photo preview on product-card hover
+(function(){
+  if(!window.matchMedia || !window.matchMedia('(hover: hover)').matches) return;
+  const triggers = Array.from(document.querySelectorAll('.full-photo-preview'));
+  if(!triggers.length) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'photo-preview-overlay';
+  overlay.innerHTML = '<div class="photo-preview-frame"><img alt="Full product photo"></div>';
+  const caption = document.createElement('div');
+  caption.className = 'photo-preview-caption';
+  document.body.appendChild(overlay);
+  document.body.appendChild(caption);
+  const previewImg = overlay.querySelector('img');
+
+  let hideTimer = null;
+  function show(trigger){
+    const src = trigger.dataset.fullImage || (trigger.querySelector('img') ? trigger.querySelector('img').src : '');
+    if(!src) return;
+    window.clearTimeout(hideTimer);
+    previewImg.src = src;
+    previewImg.alt = trigger.dataset.fullName || 'Full product photo';
+    caption.textContent = trigger.dataset.fullName || 'Full product photo';
+    overlay.classList.add('show');
+  }
+  function hide(){
+    hideTimer = window.setTimeout(() => overlay.classList.remove('show'), 80);
+  }
+  triggers.forEach(trigger => {
+    trigger.addEventListener('mouseenter', () => show(trigger));
+    trigger.addEventListener('mouseleave', hide);
+    trigger.addEventListener('focus', () => show(trigger));
+    trigger.addEventListener('blur', hide);
+  });
+})();

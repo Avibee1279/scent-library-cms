@@ -2,7 +2,7 @@
   <div class="card-actions-floating">
     <button class="mini-icon wishlist-toggle" type="button" aria-label="Add to wishlist" data-id="{{ product.id }}" data-name="{{ product.name }}">♡</button>
   </div>
-  <a class="product-image" href="{{ url_for('product_detail', product_id=product.id, slug=slugify(product.name)) }}">
+  <a class="product-image full-photo-preview" href="{{ url_for('product_detail', product_id=product.id, slug=slugify(product.name)) }}" data-full-image="{% if product.image_filename %}{{ image_url(product.image_filename) }}{% endif %}" data-full-name="{{ product.name }}">
     {% if product.image_filename %}
       <img src="{{ image_url(product.image_filename) }}" alt="{{ product.name }}">
     {% else %}
