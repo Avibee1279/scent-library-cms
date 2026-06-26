@@ -1,0 +1,41 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+<div class="admin-header">
+  <div>
+    <h1>Customer requests</h1>
+    <p>Requests submitted from the website form.</p>
+  </div>
+</div>
+<div class="cards-list">
+  {% for o in orders %}
+    <div class="order-card">
+      <div>
+        <h3>{{ o.customer_name }}</h3>
+        <p><strong>Phone:</strong> {{ o.phone }}</p>
+        <p><strong>Location:</strong> {{ o.location or '-' }}</p>
+        <p><strong>Product:</strong> {{ o.product_name or '-' }}</p>
+        <p>{{ o.message or '' }}</p>
+        <small>{{ o.created_at }}</small>
+      </div>
+      <div class="order-actions">
+        <form method="post">
+          <input type="hidden" name="order_id" value="{{ o.id }}">
+          <select name="status">
+            {% for s in ['New','Contacted','Completed','Cancelled'] %}
+              <option value="{{ s }}" {% if o.status == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit">Update</button>
+        </form>
+        <a class="button whatsapp-small" href="https://wa.me/{{ o.phone }}?text={{ quote_plus('Hi ' ~ o.customer_name ~ ', this is The Scent Library. I received your request about ' ~ (o.product_name or 'our perfumes') ~ '.') }}" target="_blank">WhatsApp</a>
+        <form method="post" action="{{ url_for('admin_order_delete', order_id=o.id) }}" onsubmit="return confirm('Delete this request?')">
+          <button type="submit" class="danger-button">Delete</button>
+        </form>
+      </div>
+      <span class="status-badge {{ o.status|lower }}">{{ o.status }}</span>
+    </div>
+  {% else %}
+    <div class="empty-admin">No request yet.</div>
+  {% endfor %}
+</div>
+{% endblock %}

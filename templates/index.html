@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="hero section-reveal">
+  <div class="hero-content">
+    <p class="eyebrow">Perfume catalogue · Mauritius</p>
+    <h1>{{ hero_title }}</h1>
+    <p>{{ tagline }}</p>
+    <div class="notice">{{ homepage_notice }}</div>
+    <div class="hero-actions">
+      <a class="btn primary" href="#products">View perfumes</a>
+      <a class="btn ghost" href="https://wa.me/{{ whatsapp_number }}?text={{ quote_plus('Hi, I want to know more about The Scent Library perfumes.') }}" target="_blank" rel="noopener">WhatsApp us</a>
+    </div>
+  </div>
+  <div class="hero-card float-card">
+    <div class="bottle">✦</div>
+    <h3>New drops</h3>
+    <p>Premium inspired fragrances, layering ideas and gift sets.</p>
+  </div>
+</header>
+
+{% if featured %}
+<section class="section section-reveal">
+  <div class="section-title">
+    <div>
+      <p class="eyebrow">Featured</p>
+      <h2>Best sellers</h2>
+    </div>
+  </div>
+  <div class="product-grid featured-grid">
+    {% for product in featured %}
+      {% include "product_card.html" %}
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="section section-reveal" id="products">
+  <div class="section-title">
+    <div>
+      <p class="eyebrow">Catalogue</p>
+      <h2>Perfumes</h2>
+    </div>
+  </div>
+
+  <form class="filters" method="get" action="{{ url_for('index') }}#products">
+    <input type="search" name="q" placeholder="Search perfume, notes, brand..." value="{{ q }}">
+    <select name="category">
+      {% for c in categories %}
+        <option value="{{ c }}" {% if selected_category == c %}selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn small" type="submit">Search</button>
+  </form>
+
+  <div class="product-grid">
+    {% for product in products %}
+      {% include "product_card.html" %}
+    {% else %}
+      <div class="empty-card">No perfume found. Try another search.</div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="section split section-reveal" id="layering">
+  <div>
+    <p class="eyebrow">Layering combos</p>
+    <h2>Help customers choose better.</h2>
+    <p>Suggest combinations for office, night out, gifting and special occasions. You can change these combos from the admin panel.</p>
+  </div>
+  <div class="combo-list">
+    {% for combo in combos %}
+      <div class="combo-card">
+        <div>
+          <strong>{{ combo.title }}</strong>
+          <p>{{ combo.description }}</p>
+        </div>
+        <span>{{ combo.product_1 }}{% if combo.product_2 %} + {{ combo.product_2 }}{% endif %}</span>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="section section-reveal" id="contact">
+  <div class="contact-grid">
+    <div class="contact-card">
+      <p class="eyebrow">Delivery & payment</p>
+      <h2>Order easily on WhatsApp.</h2>
+      <p>{{ delivery_text }}</p>
+      <div class="hero-actions">
+        <a class="btn primary" href="https://wa.me/{{ whatsapp_number }}?text={{ quote_plus('Hi, I want to order from The Scent Library.') }}" target="_blank" rel="noopener">Order on WhatsApp</a>
+        <a class="btn ghost" href="{{ instagram_url }}" target="_blank" rel="noopener">Open Instagram</a>
+      </div>
+    </div>
+    <form class="request-card" method="post" action="{{ url_for('order_request') }}">
+      <p class="eyebrow">Quick request</p>
+      <h3>Ask for availability</h3>
+      <input name="customer_name" placeholder="Your name" required>
+      <input name="phone" placeholder="Phone / WhatsApp number" required>
+      <input name="location" placeholder="Location in Mauritius">
+      <textarea name="message" rows="4" placeholder="Which perfume are you interested in?"></textarea>
+      <button class="btn primary" type="submit">Send request</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+<div class="admin-header">
+  <div>
+    <h1>Products</h1>
+    <p>Manage perfume catalogue, prices, photos and visibility.</p>
+  </div>
+  <div class="header-actions">
+    <a class="button secondary" href="{{ url_for('export_products') }}">Export CSV</a>
+    <a class="button" href="{{ url_for('admin_product_new') }}">+ Add product</a>
+  </div>
+</div>
+<div class="stats four">
+  <div><strong>{{ stats.total }}</strong><span>Total products</span></div>
+  <div><strong>{{ stats.active }}</strong><span>Active</span></div>
+  <div><strong>{{ stats.featured }}</strong><span>Featured</span></div>
+  <div><strong>{{ stats.orders }}</strong><span>New requests</span></div>
+</div>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Featured</th><th>Status</th><th>Actions</th></tr></thead>
+  <tbody>
+  {% for p in products %}
+    <tr>
+      <td>
+        <div class="product-cell">
+          {% if p.image_filename %}<img src="{{ url_for('static', filename='uploads/' ~ p.image_filename) }}" alt="">{% else %}<span class="tiny-placeholder">✧</span>{% endif %}
+          <div><strong>{{ p.name }}</strong><small>{{ p.brand }} · order {{ p.sort_order }}</small></div>
+        </div>
+      </td>
+      <td>{{ p.category }}</td>
+      <td>{{ currency }} {{ "%.0f"|format(p.price) }}</td>
+      <td>{% if p.is_featured %}<span class="pill active">Yes</span>{% else %}<span class="pill neutral">No</span>{% endif %}</td>
+      <td>{% if p.is_active %}<span class="pill active">Active</span>{% else %}<span class="pill inactive">Hidden</span>{% endif %}</td>
+      <td class="actions">
+        <a href="{{ url_for('admin_product_edit', product_id=p.id) }}">Edit</a>
+        <form method="post" action="{{ url_for('admin_product_delete', product_id=p.id) }}" onsubmit="return confirm('Delete this product?')">
+          <button type="submit" class="link-danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

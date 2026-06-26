@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ site_name }}</title>
+  <meta name="description" content="{{ tagline }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="top-progress" id="topProgress"></div>
+  <nav class="navbar">
+    <a class="brand" href="{{ url_for('index') }}">
+      <span class="brand-mark">SL</span>
+      <span>{{ site_name }}</span>
+    </a>
+    <button class="mobile-menu" id="mobileMenu" aria-label="Open menu">☰</button>
+    <div class="nav-links" id="navLinks">
+      <a href="{{ url_for('index') }}#products">Perfumes</a>
+      <a href="{{ url_for('index') }}#layering">Layering</a>
+      <a href="{{ url_for('index') }}#contact">Order</a>
+      <a class="admin-link" href="{{ url_for('admin_dashboard') }}">Admin</a>
+    </div>
+  </nav>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-wrap">
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+
+  <footer class="footer">
+    <p>{{ site_name }} · {{ business_address }} · <a href="{{ instagram_url }}" target="_blank" rel="noopener">Instagram</a></p>
+  </footer>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

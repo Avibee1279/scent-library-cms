@@ -1,0 +1,35 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+<div class="admin-header">
+  <div><h1>Layering combos</h1><p>Add combinations that appear on the homepage.</p></div>
+</div>
+<form class="form-grid" method="post">
+  <label>Title<input name="title" placeholder="Fresh Office" required></label>
+  <label>Sort order<input type="number" name="sort_order" value="0"></label>
+  <label>Product 1<input name="product_1" placeholder="Carbon"></label>
+  <label>Product 2<input name="product_2" placeholder="Clean musk"></label>
+  <label class="wide">Description<textarea name="description" rows="3" placeholder="Describe the combination"></textarea></label>
+  <label class="check"><input type="checkbox" name="is_active" checked> Show on website</label>
+  <div class="wide"><button type="submit">Add combo</button></div>
+</form>
+
+<div class="table-wrap spacing-top">
+<table>
+  <thead><tr><th>Combo</th><th>Products</th><th>Status</th><th>Actions</th></tr></thead>
+  <tbody>
+    {% for c in combos %}
+      <tr>
+        <td><strong>{{ c.title }}</strong><small>{{ c.description }}</small></td>
+        <td>{{ c.product_1 }}{% if c.product_2 %} + {{ c.product_2 }}{% endif %}</td>
+        <td>{% if c.is_active %}<span class="pill active">Active</span>{% else %}<span class="pill inactive">Hidden</span>{% endif %}</td>
+        <td>
+          <form method="post" action="{{ url_for('admin_combo_delete', combo_id=c.id) }}" onsubmit="return confirm('Delete this combo?')">
+            <button type="submit" class="link-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

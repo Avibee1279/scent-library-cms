@@ -1,0 +1,21 @@
+<article class="product-card card-reveal">
+  <a class="product-image" href="{{ url_for('product_detail', product_id=product.id, slug=slugify(product.name)) }}">
+    {% if product.image_filename %}
+      <img src="{{ url_for('static', filename='uploads/' ~ product.image_filename) }}" alt="{{ product.name }}">
+    {% else %}
+      <span class="placeholder-bottle">✧</span>
+    {% endif %}
+    {% if product.is_featured %}<span class="badge">Featured</span>{% endif %}
+  </a>
+  <div class="product-body">
+    <div class="product-meta"><span>{{ product.category }}</span><span>{{ product.size }}</span></div>
+    <h3><a href="{{ url_for('product_detail', product_id=product.id, slug=slugify(product.name)) }}">{{ product.name }}</a></h3>
+    <p class="brand-name">{{ product.brand }}</p>
+    <p>{{ product.description }}</p>
+    {% if product.notes %}<p class="notes"><strong>Notes:</strong> {{ product.notes }}</p>{% endif %}
+    <div class="product-bottom">
+      <strong>{{ currency }} {{ "%.0f"|format(product.price) }}</strong>
+      <a class="btn whatsapp" href="https://wa.me/{{ whatsapp_number }}?text={{ quote_plus('Hi, I am interested in ' ~ product.name ~ ' ' ~ (product.size or '') ~ '. Is it available?') }}" target="_blank" rel="noopener">WhatsApp</a>
+    </div>
+  </div>
+</article>

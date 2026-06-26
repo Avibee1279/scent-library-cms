@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin login</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+</head>
+<body class="login-page">
+  <form class="login-card" method="post">
+    <h1>The Scent Library</h1>
+    <p>Admin login</p>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
+      {% endif %}
+    {% endwith %}
+    <label>Username<input name="username" value="admin" required></label>
+    <label>Password<input type="password" name="password" placeholder="admin123" required></label>
+    <button type="submit">Login</button>
+    <small>Default login: admin / admin123. Change it before going live.</small>
+  </form>
+</body>
+</html>

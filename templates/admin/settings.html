@@ -1,0 +1,19 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+<div class="admin-header">
+  <div><h1>Website settings</h1><p>Change WhatsApp, Instagram, homepage text and delivery info.</p></div>
+</div>
+<form class="form-grid" method="post">
+  <label>Site name<input name="site_name" value="{{ settings.get('site_name','') }}"></label>
+  <label>Currency<input name="currency" value="{{ settings.get('currency','Rs') }}"></label>
+  <label>WhatsApp number<input name="whatsapp_number" value="{{ settings.get('whatsapp_number','') }}" placeholder="2305xxxxxxx"></label>
+  <label>Instagram URL<input name="instagram_url" value="{{ settings.get('instagram_url','') }}"></label>
+  <label>Business email<input name="business_email" value="{{ settings.get('business_email','') }}"></label>
+  <label>Business address<input name="business_address" value="{{ settings.get('business_address','') }}"></label>
+  <label class="wide">Hero title<textarea name="hero_title" rows="2">{{ settings.get('hero_title','') }}</textarea></label>
+  <label class="wide">Tagline<textarea name="tagline" rows="3">{{ settings.get('tagline','') }}</textarea></label>
+  <label class="wide">Homepage notice<textarea name="homepage_notice" rows="3">{{ settings.get('homepage_notice','') }}</textarea></label>
+  <label class="wide">Delivery / payment text<textarea name="delivery_text" rows="4">{{ settings.get('delivery_text','') }}</textarea></label>
+  <div class="wide"><button class="button" type="submit">Save settings</button></div>
+</form>
+{% endblock %}
