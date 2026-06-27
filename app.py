@@ -311,30 +311,37 @@ def upload_catalogue_file(file_storage):
 
     safe_name = secure_filename(file_storage.filename)
     name_without_ext = safe_name.rsplit(".", 1)[0] if "." in safe_name else "catalogue"
-    base_id = f"catalogue-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{slugify(name_without_ext)}"
+
     if USE_CLOUDINARY:
-        # PDFs must be uploaded as RAW files on Cloudinary. Include the .pdf
-        # extension in the public_id so the downloaded file keeps a proper name.
-        resource_type = "raw" if ext == "pdf" else "image"
-        public_id = f"{base_id}.pdf" if ext == "pdf" else base_id
+        # For the customer catalogue, keep a stable clean filename.
+        # Cloudinary will still add a /v123456789/ version in the URL,
+        # but the file name at the end will be exactly catalogue.pdf.
+        if ext == "pdf":
+            resource_type = "raw"
+            public_id = "catalogue.pdf"
+        else:
+            resource_type = "image"
+            public_id = f"catalogue-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{slugify(name_without_ext)}"
+
         try:
             file_storage.stream.seek(0)
         except Exception:
             pass
+
         result = cloudinary.uploader.upload(
             file_storage,
             folder="scent-library/catalogues",
             public_id=public_id,
             overwrite=True,
+            invalidate=True,
             resource_type=resource_type,
         )
         return result.get("secure_url")
 
-    filename = secure_filename(file_storage.filename)
-    filename = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{filename}"
+    # Local development fallback. Keep the PDF filename clean locally too.
+    filename = "catalogue.pdf" if ext == "pdf" else secure_filename(file_storage.filename)
     file_storage.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
     return filename
-
 
 def catalogue_download_url(value):
     """Return a URL for an uploaded catalogue file."""
@@ -1513,7 +1520,8 @@ def admin_catalogue():
                 if catalogue_file and catalogue_file.filename:
                     uploaded_url = upload_catalogue_file(catalogue_file)
                     save_setting_value(db, "catalogue_uploaded_url", uploaded_url or "")
-                    save_setting_value(db, "catalogue_uploaded_name", secure_filename(catalogue_file.filename))
+                    uploaded_display_name = "catalogue.pdf" if catalogue_file.filename.lower().endswith(".pdf") else secure_filename(catalogue_file.filename)
+                    save_setting_value(db, "catalogue_uploaded_name", uploaded_display_name)
                     save_setting_value(db, "catalogue_uploaded_at", now_iso())
                     flash("Luxury catalogue uploaded. Customer download can now use this file.", "success")
                 save_setting_value(db, "catalogue_mode", "uploaded" if mode == "uploaded" else "auto")
