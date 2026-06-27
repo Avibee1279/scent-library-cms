@@ -309,14 +309,24 @@ def upload_catalogue_file(file_storage):
     if ext not in {"pdf", "png", "jpg", "jpeg", "webp"}:
         raise ValueError("Catalogue must be a PDF or image file: pdf, png, jpg, jpeg or webp.")
 
-    base_id = f"catalogue-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    safe_name = secure_filename(file_storage.filename)
+    name_without_ext = safe_name.rsplit(".", 1)[0] if "." in safe_name else "catalogue"
+    base_id = f"catalogue-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{slugify(name_without_ext)}"
     if USE_CLOUDINARY:
+        # PDFs must be uploaded as RAW files on Cloudinary. Include the .pdf
+        # extension in the public_id so the downloaded file keeps a proper name.
+        resource_type = "raw" if ext == "pdf" else "image"
+        public_id = f"{base_id}.pdf" if ext == "pdf" else base_id
+        try:
+            file_storage.stream.seek(0)
+        except Exception:
+            pass
         result = cloudinary.uploader.upload(
             file_storage,
             folder="scent-library/catalogues",
-            public_id=base_id,
+            public_id=public_id,
             overwrite=True,
-            resource_type="raw" if ext == "pdf" else "image",
+            resource_type=resource_type,
         )
         return result.get("secure_url")
 
@@ -1520,6 +1530,10 @@ def admin_catalogue():
         except ValueError as exc:
             db.rollback()
             flash(str(exc), "error")
+        except Exception as exc:
+            db.rollback()
+            app.logger.exception("Catalogue manager error")
+            flash(f"Catalogue action failed: {exc}", "error")
         return redirect(url_for("admin_catalogue"))
 
     products = db.execute("SELECT * FROM products WHERE is_active = 1 ORDER BY is_featured DESC, sort_order ASC, name ASC").fetchall()
