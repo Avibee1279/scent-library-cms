@@ -402,10 +402,10 @@ def init_db():
                         INSERT INTO products
                         (name, brand, category, size, sku, scent_family, stock_qty, low_stock_threshold,
                          price, description, notes, occasion, image_filename,
-                         is_featured, is_active, sort_order, created_at, updated_at)
+                         is_featured, is_active, sort_order, views, whatsapp_clicks, created_at, updated_at)
                         VALUES (:name, :brand, :category, :size, :sku, :scent_family, :stock_qty, :low_stock_threshold,
                                 :price, :description, :notes, :occasion, :image_filename,
-                                :is_featured, :is_active, :sort_order, :created_at, :updated_at)
+                                :is_featured, :is_active, :sort_order, 0, 0, :created_at, :updated_at)
                     """),
                     {
                         "name": p[0], "brand": p[1], "category": p[2], "size": p[3], "sku": p[4],
@@ -572,52 +572,198 @@ def track_whatsapp_restock(product_id):
 
 @app.route("/catalogue.pdf")
 def download_catalogue():
-    """Generate a downloadable PDF catalogue from the live product database."""
+    """Generate a luxury downloadable PDF catalogue from live CMS data."""
     from xml.sax.saxutils import escape
+    from reportlab.pdfgen import canvas
     from reportlab.lib import colors
-    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
     from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
     from reportlab.lib.utils import ImageReader
-    from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image,
-        KeepTogether, PageBreak
-    )
+
+    W, H = A4
+    IVORY = colors.HexColor("#FBF4E8")
+    PAPER = colors.HexColor("#FFF9F0")
+    GOLD = colors.HexColor("#B9822F")
+    GOLD_LIGHT = colors.HexColor("#E8D1AC")
+    ESPRESSO = colors.HexColor("#22160F")
+    TAUPE = colors.HexColor("#746353")
+    MUTED = colors.HexColor("#8E7B67")
+    GREEN = colors.HexColor("#267A48")
+    RED = colors.HexColor("#A34837")
 
     def clean(value, default=""):
         if value is None:
             return default
-        return escape(str(value).strip())
+        return str(value).strip()
 
-    def image_flowable(image_value, max_width, max_height):
-        """Return a ReportLab Image flowable, preserving aspect ratio."""
+    def money(value):
+        try:
+            amount = float(value or 0)
+        except Exception:
+            amount = 0
+        return f"{currency_value} {amount:,.0f}".replace(",", " ")
+
+    def safe_text(value, max_len=None):
+        value = clean(value)
+        if max_len and len(value) > max_len:
+            return value[: max_len - 1].rstrip() + "…"
+        return value
+
+    def fetch_image_source(image_value):
+        """Return BytesIO or file path for ReportLab ImageReader."""
         if not image_value:
             return None
         image_value = str(image_value).strip()
         try:
             if image_value.startswith("http://") or image_value.startswith("https://"):
-                req = Request(image_value, headers={"User-Agent": "Mozilla/5.0"})
-                image_bytes = urlopen(req, timeout=8).read()
-                image_file = io.BytesIO(image_bytes)
-            else:
-                image_file = os.path.join(app.config["UPLOAD_FOLDER"], image_value)
-                if not os.path.exists(image_file):
-                    return None
-            reader = ImageReader(image_file)
-            iw, ih = reader.getSize()
-            if not iw or not ih:
-                return None
-            scale = min(max_width / float(iw), max_height / float(ih))
-            width = iw * scale
-            height = ih * scale
-            if hasattr(image_file, "seek"):
-                image_file.seek(0)
-            img = Image(image_file, width=width, height=height)
-            img.hAlign = "CENTER"
-            return img
+                # Cloudinary transformation for faster PDF generation and smaller downloads.
+                url = image_value
+                if "res.cloudinary.com" in url and "/upload/" in url and "f_auto" not in url:
+                    url = url.replace("/upload/", "/upload/f_auto,q_auto,w_1200/")
+                req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                return io.BytesIO(urlopen(req, timeout=12).read())
+            path = os.path.join(app.config["UPLOAD_FOLDER"], image_value)
+            if os.path.exists(path):
+                return path
         except Exception:
             return None
+        return None
+
+    def draw_bg(c, page_title=None, page_no=None):
+        c.setFillColor(IVORY)
+        c.rect(0, 0, W, H, fill=1, stroke=0)
+        # subtle outer frame
+        c.setStrokeColor(GOLD)
+        c.setLineWidth(0.8)
+        margin = 8 * mm
+        c.roundRect(margin, margin, W - 2 * margin, H - 2 * margin, 5 * mm, fill=0, stroke=1)
+        c.setStrokeColor(GOLD_LIGHT)
+        c.setLineWidth(0.35)
+        c.roundRect(margin + 2 * mm, margin + 2 * mm, W - 2 * (margin + 2 * mm), H - 2 * (margin + 2 * mm), 4 * mm, fill=0, stroke=1)
+        # corner flourishes
+        c.setStrokeColor(GOLD)
+        c.setLineWidth(0.7)
+        for sx, sy in [(1,1), (-1,1), (1,-1), (-1,-1)]:
+            x = W - margin if sx < 0 else margin
+            y = H - margin if sy > 0 else margin
+            c.line(x, y - sy * 8 * mm, x + sx * 8 * mm, y)
+        if page_title:
+            c.setFont("Helvetica-Bold", 8)
+            c.setFillColor(GOLD)
+            c.drawCentredString(W / 2, H - 15 * mm, page_title.upper())
+        if page_no:
+            c.setFont("Helvetica", 7)
+            c.setFillColor(MUTED)
+            c.drawRightString(W - 13 * mm, 10 * mm, f"Page {page_no}")
+            c.drawString(13 * mm, 10 * mm, site)
+
+    def draw_logo_or_mark(c, x, y, max_w=32*mm, max_h=14*mm):
+        logo_src = fetch_image_source(logo_value)
+        if logo_src:
+            draw_image_contain(c, logo_src, x - max_w/2, y - max_h/2, max_w, max_h)
+        else:
+            c.setStrokeColor(GOLD)
+            c.setLineWidth(1)
+            c.roundRect(x - 7*mm, y - 7*mm, 14*mm, 14*mm, 5*mm, fill=0, stroke=1)
+            c.setFont("Helvetica-Bold", 13)
+            c.setFillColor(GOLD)
+            c.drawCentredString(x, y - 2.5*mm, "✦")
+
+    def draw_rule(c, y, width=45*mm):
+        c.setStrokeColor(GOLD)
+        c.setLineWidth(0.6)
+        c.line(W/2 - width/2, y, W/2 - 4*mm, y)
+        c.line(W/2 + 4*mm, y, W/2 + width/2, y)
+        c.setFillColor(GOLD)
+        c.setFont("Helvetica", 10)
+        c.drawCentredString(W/2, y - 2.4*mm, "◆")
+
+    def get_img_size(src):
+        reader = ImageReader(src)
+        return reader, reader.getSize()
+
+    def draw_image_contain(c, src, x, y, w, h):
+        try:
+            reader, (iw, ih) = get_img_size(src)
+            scale = min(w / iw, h / ih)
+            dw, dh = iw * scale, ih * scale
+            c.drawImage(reader, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh, mask="auto")
+            return True
+        except Exception:
+            return False
+
+    def draw_image_cover(c, src, x, y, w, h):
+        try:
+            reader, (iw, ih) = get_img_size(src)
+            scale = max(w / iw, h / ih)
+            dw, dh = iw * scale, ih * scale
+            c.saveState()
+            p = c.beginPath()
+            p.rect(x, y, w, h)
+            c.clipPath(p, stroke=0, fill=0)
+            c.drawImage(reader, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh, mask="auto")
+            c.restoreState()
+            return True
+        except Exception:
+            return False
+
+    def placeholder(c, x, y, w, h):
+        c.setFillColor(colors.HexColor("#F4E8D8"))
+        c.roundRect(x, y, w, h, 4*mm, fill=1, stroke=0)
+        c.setFillColor(GOLD)
+        c.setFont("Helvetica-Bold", 26)
+        c.drawCentredString(x + w/2, y + h/2 - 6, "✦")
+
+    def text_lines(text, font_name, font_size, max_width):
+        words = clean(text).split()
+        lines, current = [], ""
+        for word in words:
+            trial = (current + " " + word).strip()
+            if c.stringWidth(trial, font_name, font_size) <= max_width:
+                current = trial
+            else:
+                if current:
+                    lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
+        return lines
+
+    def draw_wrapped(c, text, x, y, max_width, font="Helvetica", size=9, leading=12, color=TAUPE, max_lines=None):
+        c.setFillColor(color)
+        c.setFont(font, size)
+        lines = text_lines(text, font, size, max_width)
+        if max_lines and len(lines) > max_lines:
+            lines = lines[:max_lines]
+            if len(lines[-1]) > 2:
+                lines[-1] = lines[-1].rstrip(".,; ") + "…"
+        for line in lines:
+            c.drawString(x, y, line)
+            y -= leading
+        return y
+
+    def draw_badge(c, text, x, y, bg=colors.white, fg=GOLD):
+        c.setFont("Helvetica-Bold", 7)
+        tw = c.stringWidth(text, "Helvetica-Bold", 7)
+        bw = tw + 8*mm
+        c.setFillColor(bg)
+        c.setStrokeColor(GOLD_LIGHT)
+        c.roundRect(x, y, bw, 6.5*mm, 3*mm, fill=1, stroke=1)
+        c.setFillColor(fg)
+        c.drawCentredString(x + bw/2, y + 2*mm, text)
+        return bw
+
+    def stock_status(product):
+        qty = int(product["stock_qty"] or 0)
+        threshold = int(product["low_stock_threshold"] or 2)
+        if qty <= 0:
+            return "Out of stock", RED
+        if qty <= threshold:
+            return "Low stock", GOLD
+        return "In stock", GREEN
+
+    def product_image_value(product):
+        return product["image_filename"] or ""
 
     products = get_db().execute(
         """
@@ -628,158 +774,237 @@ def download_catalogue():
     ).fetchall()
 
     site = setting("site_name", "The Scent Library")
-    tagline_value = setting("tagline", "Premium perfumes, inspired scents and layering combos in Mauritius.")
+    tagline_value = setting("tagline", "Curated signature scents for every mood, occasion and style.")
     currency_value = setting("currency", "Rs")
     whatsapp_value = setting("whatsapp_number", "23050000000")
-    instagram_value = setting("instagram_url", "")
+    instagram_value = setting("instagram_url", "https://instagram.com/scentlibrary.mu")
     address_value = setting("business_address", "Mauritius")
     logo_value = setting("logo_url", "")
+    footer_note_value = setting("footer_note", "Catalogue generated from our live collection")
 
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        rightMargin=14 * mm,
-        leftMargin=14 * mm,
-        topMargin=16 * mm,
-        bottomMargin=16 * mm,
-        title=f"{site} Catalogue",
-        author=site,
-    )
+    c = canvas.Canvas(buffer, pagesize=A4)
+    c.setTitle(f"{site} Fragrance Catalogue")
+    c.setAuthor(site)
 
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        "CatalogueTitle", parent=styles["Title"], fontName="Helvetica-Bold",
-        fontSize=26, leading=30, textColor=colors.HexColor("#20150C"), alignment=TA_CENTER,
-        spaceAfter=6,
-    )
-    sub_style = ParagraphStyle(
-        "CatalogueSub", parent=styles["BodyText"], fontName="Helvetica",
-        fontSize=10.5, leading=15, textColor=colors.HexColor("#6B5A49"), alignment=TA_CENTER,
-        spaceAfter=16,
-    )
-    section_style = ParagraphStyle(
-        "Section", parent=styles["Heading2"], fontName="Helvetica-Bold",
-        fontSize=14, leading=18, textColor=colors.HexColor("#8A5A24"), spaceBefore=8, spaceAfter=8,
-    )
-    name_style = ParagraphStyle(
-        "ProductName", parent=styles["Heading3"], fontName="Helvetica-Bold",
-        fontSize=15, leading=18, textColor=colors.HexColor("#20150C"), spaceAfter=3,
-    )
-    meta_style = ParagraphStyle(
-        "Meta", parent=styles["BodyText"], fontName="Helvetica-Bold",
-        fontSize=8.5, leading=11, textColor=colors.HexColor("#8A5A24"), spaceAfter=5,
-    )
-    body_style = ParagraphStyle(
-        "ProductBody", parent=styles["BodyText"], fontName="Helvetica",
-        fontSize=9, leading=12.5, textColor=colors.HexColor("#55483B"), spaceAfter=4,
-    )
-    price_style = ParagraphStyle(
-        "Price", parent=styles["BodyText"], fontName="Helvetica-Bold",
-        fontSize=12, leading=14, textColor=colors.HexColor("#20150C"), spaceBefore=4,
-    )
-    small_style = ParagraphStyle(
-        "Small", parent=styles["BodyText"], fontName="Helvetica",
-        fontSize=8, leading=10.5, textColor=colors.HexColor("#7B6B5C"),
-    )
-    right_small_style = ParagraphStyle(
-        "RightSmall", parent=small_style, alignment=TA_RIGHT,
-    )
+    # ---------------- Cover page ----------------
+    draw_bg(c)
+    draw_logo_or_mark(c, W/2, H - 30*mm)
+    c.setFillColor(ESPRESSO)
+    c.setFont("Helvetica", 15)
+    c.drawCentredString(W/2, H - 47*mm, site.upper())
+    draw_rule(c, H - 53*mm, 56*mm)
+    c.setFont("Times-Bold", 32)
+    c.drawCentredString(W/2, H - 73*mm, "Fragrance Catalogue 2026")
+    c.setFont("Times-Italic", 12)
+    c.setFillColor(TAUPE)
+    c.drawCentredString(W/2, H - 86*mm, safe_text(tagline_value, 95) or "Curated signature scents for every mood, occasion and style.")
+    c.setFont("Helvetica-Bold", 12)
+    c.setFillColor(GOLD)
+    c.drawCentredString(W/2, H - 108*mm, "MOST WANTED NOW")
+    c.setStrokeColor(GOLD_LIGHT)
+    c.line(27*mm, H - 106*mm, 80*mm, H - 106*mm)
+    c.line(W - 80*mm, H - 106*mm, W - 27*mm, H - 106*mm)
 
-    story = []
-    logo = image_flowable(logo_value, 42 * mm, 18 * mm)
-    if logo:
-        story.append(logo)
-        story.append(Spacer(1, 5 * mm))
-    story.append(Paragraph(clean(site), title_style))
-    story.append(Paragraph(clean(tagline_value), sub_style))
+    featured = list(products[:4])
+    card_w = 42 * mm
+    gap = 5 * mm
+    total = len(featured) * card_w + max(0, len(featured) - 1) * gap
+    start_x = (W - total) / 2 if featured else 20 * mm
+    top_y = H - 213 * mm
+    if not featured:
+        c.setFont("Helvetica", 11)
+        c.setFillColor(TAUPE)
+        c.drawCentredString(W/2, H/2, "Add active products in Admin to generate your catalogue.")
+    for i, p in enumerate(featured):
+        x = start_x + i * (card_w + gap)
+        y = top_y
+        c.setFillColor(PAPER)
+        c.setStrokeColor(GOLD_LIGHT)
+        c.roundRect(x, y, card_w, 86*mm, 4*mm, fill=1, stroke=1)
+        img_box_y = y + 35*mm
+        img_src = fetch_image_source(product_image_value(p))
+        if img_src:
+            # cover on cover page for polished alignment
+            draw_image_cover(c, img_src, x+1.5*mm, img_box_y, card_w-3*mm, 48*mm)
+        else:
+            placeholder(c, x+1.5*mm, img_box_y, card_w-3*mm, 48*mm)
+        c.setFillColor(GOLD)
+        c.setFont("Helvetica", 8)
+        c.drawCentredString(x + card_w/2, y + 30*mm, "◆")
+        c.setFont("Times-Bold", 11)
+        c.setFillColor(ESPRESSO)
+        name_lines = text_lines(safe_text(p["name"], 38), "Times-Bold", 11, card_w - 8*mm)[:2]
+        ty = y + 24*mm
+        for line in name_lines:
+            c.drawCentredString(x + card_w/2, ty, line)
+            ty -= 5*mm
+        c.setFont("Times-Italic", 8.5)
+        c.setFillColor(GOLD)
+        c.drawCentredString(x + card_w/2, y + 11*mm, safe_text(p["brand"] or "The Scent Library", 24))
+        c.setFont("Helvetica", 7)
+        c.setFillColor(TAUPE)
+        descriptor = safe_text(p["scent_family"] or p["notes"] or p["category"], 32)
+        c.drawCentredString(x + card_w/2, y + 5.5*mm, descriptor)
 
-    info_table = Table(
-        [[
-            Paragraph(f"<b>WhatsApp:</b> {clean(whatsapp_value)}<br/><b>Instagram:</b> {clean(instagram_value)}", small_style),
-            Paragraph(f"<b>Catalogue generated:</b><br/>{datetime.now().strftime('%d %b %Y')}", right_small_style),
-        ]],
-        colWidths=[95 * mm, 75 * mm],
-    )
-    info_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFF8EC")),
-        ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#E8D7BE")),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 10),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-        ("TOPPADDING", (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-    ]))
-    story.append(info_table)
-    story.append(Spacer(1, 7 * mm))
-    story.append(Paragraph("Perfume Catalogue", section_style))
+    # footer strip
+    c.setFillColor(PAPER)
+    c.setStrokeColor(GOLD_LIGHT)
+    c.roundRect(18*mm, 21*mm, W-36*mm, 18*mm, 7*mm, fill=1, stroke=1)
+    c.setFillColor(ESPRESSO)
+    c.setFont("Helvetica", 8.5)
+    c.drawString(28*mm, 29*mm, "WhatsApp orders available")
+    c.drawCentredString(W/2, 29*mm, f"Instagram: {instagram_value.replace('https://instagram.com/', '@')}")
+    c.drawRightString(W-28*mm, 29*mm, "Generated from live collection")
+    c.showPage()
 
-    if not products:
-        story.append(Paragraph("No active products are available in the catalogue yet.", body_style))
-    else:
-        for product in products:
-            image_cell = image_flowable(product["image_filename"], 42 * mm, 52 * mm)
-            if image_cell is None:
-                image_cell = Paragraph("No image", small_style)
+    # ---------------- Product pages ----------------
+    page_no = 2
+    per_page = 4
+    if products:
+        for offset in range(0, len(products), per_page):
+            page_products = products[offset: offset + per_page]
+            draw_bg(c, "The Scent Library Catalogue", page_no)
+            c.setFont("Times-Bold", 27)
+            c.setFillColor(ESPRESSO)
+            title = "Most Wanted Now" if offset == 0 else "Fragrance Selection"
+            c.drawCentredString(W/2, H - 31*mm, title)
+            draw_rule(c, H - 39*mm, 54*mm)
 
-            stock_qty = int(product["stock_qty"] or 0)
-            stock_text = "Available" if stock_qty > 0 else "Out of stock"
-            if stock_qty > 0 and stock_qty <= int(product["low_stock_threshold"] or 2):
-                stock_text = "Low stock"
-            featured_text = "Best seller" if int(product["is_featured"] or 0) == 1 else ""
-            meta_bits = [
-                clean(product["brand"] or "The Scent Library"),
-                clean(product["category"]),
-                clean(product["size"]),
+            positions = [
+                (18*mm, H - 142*mm),
+                (108*mm, H - 142*mm),
+                (18*mm, H - 258*mm),
+                (108*mm, H - 258*mm),
             ]
-            if product["scent_family"]:
-                meta_bits.append(clean(product["scent_family"]))
-            if featured_text:
-                meta_bits.append(featured_text)
+            card_w = 84*mm
+            card_h = 104*mm
+            for p, (x, y) in zip(page_products, positions):
+                c.setFillColor(PAPER)
+                c.setStrokeColor(GOLD_LIGHT)
+                c.roundRect(x, y, card_w, card_h, 4*mm, fill=1, stroke=1)
+                img_h = 45*mm
+                img_src = fetch_image_source(product_image_value(p))
+                c.setFillColor(colors.HexColor("#F8EFE2"))
+                c.roundRect(x+3*mm, y+card_h-img_h-3*mm, card_w-6*mm, img_h, 3*mm, fill=1, stroke=0)
+                if img_src:
+                    draw_image_contain(c, img_src, x+5*mm, y+card_h-img_h-1*mm, card_w-10*mm, img_h-5*mm)
+                else:
+                    placeholder(c, x+5*mm, y+card_h-img_h-1*mm, card_w-10*mm, img_h-5*mm)
+                if int(p["is_featured"] or 0) == 1:
+                    draw_badge(c, "Best Seller", x+5*mm, y+card_h-10*mm)
+                stock_text, stock_color = stock_status(p)
+                c.setFillColor(stock_color)
+                c.setFont("Helvetica-Bold", 7)
+                c.drawRightString(x+card_w-6*mm, y+card_h-7*mm, stock_text)
 
-            details = [
-                Paragraph(clean(product["name"]), name_style),
-                Paragraph(" · ".join([bit for bit in meta_bits if bit]), meta_style),
-                Paragraph(clean(product["description"] or ""), body_style),
-            ]
-            if product["notes"]:
-                details.append(Paragraph(f"<b>Notes:</b> {clean(product['notes'])}", body_style))
-            if product["occasion"]:
-                details.append(Paragraph(f"<b>Occasion:</b> {clean(product['occasion'])}", body_style))
-            details.append(Paragraph(f"{clean(currency_value)} {float(product['price'] or 0):,.0f} &nbsp;&nbsp; | &nbsp;&nbsp; {stock_text}", price_style))
-            if product["sku"]:
-                details.append(Paragraph(f"SKU: {clean(product['sku'])}", small_style))
+                tx = x + 6*mm
+                ty = y + card_h - img_h - 9*mm
+                c.setFont("Helvetica-Bold", 7.5)
+                c.setFillColor(GOLD)
+                c.drawString(tx, ty, safe_text(p["category"], 16).upper())
+                c.drawRightString(x+card_w-6*mm, ty, safe_text(p["size"], 10).upper())
+                ty -= 8*mm
+                c.setFillColor(ESPRESSO)
+                c.setFont("Times-Bold", 14)
+                for line in text_lines(safe_text(p["name"], 50), "Times-Bold", 14, card_w-12*mm)[:2]:
+                    c.drawString(tx, ty, line)
+                    ty -= 6*mm
+                c.setFillColor(ESPRESSO)
+                c.setFont("Helvetica-Bold", 8.5)
+                c.drawString(tx, ty, safe_text(p["brand"] or "The Scent Library", 36))
+                ty -= 8*mm
+                if p["scent_family"]:
+                    wbadge = draw_badge(c, safe_text(p["scent_family"], 24), tx, ty-1*mm, bg=colors.HexColor("#F3E5CF"), fg=colors.HexColor("#8A5A24"))
+                    ty -= 9*mm
+                if p["notes"]:
+                    ty = draw_wrapped(c, "Notes: " + safe_text(p["notes"], 80), tx, ty, card_w-12*mm, "Helvetica", 7.4, 9, TAUPE, 2)
+                if p["description"]:
+                    ty = draw_wrapped(c, safe_text(p["description"], 115), tx, ty-1*mm, card_w-12*mm, "Helvetica", 7.4, 9, TAUPE, 3)
+                c.setFont("Helvetica-Bold", 13)
+                c.setFillColor(ESPRESSO)
+                c.drawString(tx, y + 9*mm, money(p["price"]))
+                if p["sku"]:
+                    c.setFont("Helvetica", 6.7)
+                    c.setFillColor(MUTED)
+                    c.drawRightString(x + card_w - 6*mm, y + 9.5*mm, "SKU: " + safe_text(p["sku"], 18))
+            c.showPage()
+            page_no += 1
 
-            card = Table([[image_cell, details]], colWidths=[50 * mm, 120 * mm])
-            card.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFFCF6")),
-                ("BOX", (0, 0), (-1, -1), 0.7, colors.HexColor("#E8D7BE")),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 8),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-                ("TOPPADDING", (0, 0), (-1, -1), 8),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-            ]))
-            story.append(KeepTogether([card, Spacer(1, 5 * mm)]))
+    # ---------------- Closing page ----------------
+    draw_bg(c, "Orders & Enquiries", page_no)
+    draw_logo_or_mark(c, W/2, H - 29*mm)
+    c.setFillColor(ESPRESSO)
+    c.setFont("Helvetica", 13)
+    c.drawCentredString(W/2, H - 45*mm, site.upper())
+    c.setFont("Times-Bold", 34)
+    c.drawCentredString(W/2, H - 66*mm, "Order & Enquiries")
+    draw_rule(c, H - 77*mm, 55*mm)
+    c.setFont("Helvetica", 11)
+    c.setFillColor(TAUPE)
+    c.drawCentredString(W/2, H - 91*mm, "Contact us for availability, recommendations and gifting ideas.")
 
-    story.append(Spacer(1, 6 * mm))
-    story.append(Paragraph(
-        f"To order, send us a WhatsApp message on {clean(whatsapp_value)}. Prices and stock may change without notice.",
-        small_style,
-    ))
+    c.setFont("Times-Bold", 20)
+    c.setFillColor(GOLD)
+    c.drawString(22*mm, H - 125*mm, "How to order")
+    c.setStrokeColor(GOLD_LIGHT)
+    c.line(22*mm, H - 130*mm, 86*mm, H - 130*mm)
+    c.setFont("Helvetica", 10)
+    c.setFillColor(ESPRESSO)
+    y = H - 143*mm
+    for item in ["Browse your favourites", "Message us on WhatsApp", "Confirm availability and collection or delivery"]:
+        c.setFillColor(GOLD)
+        c.circle(25*mm, y+1.2*mm, 1.1*mm, fill=1, stroke=0)
+        c.setFillColor(ESPRESSO)
+        c.drawString(30*mm, y, item)
+        y -= 9*mm
 
-    def page_footer(canvas, pdf_doc):
-        canvas.saveState()
-        canvas.setFont("Helvetica", 8)
-        canvas.setFillColor(colors.HexColor("#7B6B5C"))
-        canvas.drawString(14 * mm, 9 * mm, site)
-        canvas.drawRightString(A4[0] - 14 * mm, 9 * mm, f"Page {pdf_doc.page}")
-        canvas.restoreState()
+    c.setFont("Times-Bold", 20)
+    c.setFillColor(GOLD)
+    c.drawString(22*mm, H - 180*mm, "Why shop with us")
+    c.line(22*mm, H - 185*mm, 93*mm, H - 185*mm)
+    c.setFont("Helvetica", 10)
+    y = H - 198*mm
+    for item in ["Curated inspired fragrances", "Carefully selected best sellers", "Personal recommendations", "Gift-friendly picks"]:
+        c.setFillColor(GOLD)
+        c.circle(25*mm, y+1.2*mm, 1.1*mm, fill=1, stroke=0)
+        c.setFillColor(ESPRESSO)
+        c.drawString(30*mm, y, item)
+        y -= 9*mm
 
-    doc.build(story, onFirstPage=page_footer, onLaterPages=page_footer)
+    # product collage on closing page
+    collage = list(products[:4])
+    cx, cy = 106*mm, H - 205*mm
+    sizes = [(24*mm, 52*mm), (24*mm, 52*mm), (31*mm, 45*mm), (28*mm, 45*mm)]
+    xs = [cx, cx+25*mm, cx+50*mm, cx+83*mm]
+    for p, x, (iw, ih) in zip(collage, xs, sizes):
+        src = fetch_image_source(product_image_value(p))
+        if src:
+            draw_image_contain(c, src, x, cy, iw, ih)
+
+    # contact box
+    box_x, box_y, box_w, box_h = 42*mm, 38*mm, W-84*mm, 46*mm
+    c.setFillColor(PAPER)
+    c.setStrokeColor(GOLD)
+    c.roundRect(box_x, box_y, box_w, box_h, 5*mm, fill=1, stroke=1)
+    c.setFont("Times-Bold", 18)
+    c.setFillColor(GOLD)
+    c.drawCentredString(W/2, box_y + box_h - 13*mm, "Connect with us")
+    c.setFont("Helvetica", 10)
+    c.setFillColor(ESPRESSO)
+    c.drawString(box_x + 18*mm, box_y + 24*mm, f"WhatsApp: {whatsapp_value}")
+    c.drawString(box_x + 18*mm, box_y + 15*mm, f"Instagram: {instagram_value.replace('https://instagram.com/', '@')}")
+    c.drawString(box_x + 18*mm, box_y + 6*mm, address_value)
+    c.setFont("Times-Italic", 12)
+    c.setFillColor(TAUPE)
+    c.drawCentredString(W/2, 25*mm, f"{site} — curated scents for every mood, moment and occasion.")
+    c.setFont("Helvetica", 7)
+    c.drawCentredString(W/2, 16*mm, "Prices and availability are subject to change.")
+    c.save()
+
     pdf_data = buffer.getvalue()
     buffer.close()
-    filename = f"{slugify(site)}-catalogue.pdf"
+    filename = f"{slugify(site)}-luxury-catalogue.pdf"
     return Response(
         pdf_data,
         mimetype="application/pdf",

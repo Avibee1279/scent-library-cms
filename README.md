@@ -126,3 +126,21 @@ Start command remains:
 ```text
 gunicorn app:app
 ```
+
+## Luxury auto-generated PDF catalogue
+
+This version includes an upgraded `/catalogue.pdf` route that generates a luxury-style PDF catalogue automatically from live CMS data.
+
+It uses:
+- Products, prices, stock, SKU and scent family from Neon/PostgreSQL
+- Product photos and logo from Cloudinary
+- Site settings from Admin
+- WhatsApp / Instagram details from Admin settings
+
+Customer URL:
+
+```text
+https://your-site.onrender.com/catalogue.pdf
+```
+
+After updating products in Admin, the next PDF download is generated fresh automatically.
