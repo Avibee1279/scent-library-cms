@@ -7,6 +7,7 @@
     <p>{{ tagline }}</p>
     <div class="hero-actions">
       <a class="btn primary" href="#products">Shop perfumes</a>
+      <a class="btn ghost" href="{{ url_for('download_catalogue') }}">Download catalogue</a>
       <a class="btn ghost" href="#collections">Explore collections</a>
     </div>
     <div class="trust-row">
@@ -93,6 +94,7 @@
       <p class="eyebrow">Catalogue</p>
       <h2>Shop the collection</h2>
     </div>
+    <a class="text-link" href="{{ url_for('download_catalogue') }}">Download PDF catalogue</a>
   </div>
 
   <form class="filters luxe-filters" method="get" action="{{ url_for('index') }}#products">

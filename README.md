@@ -1,3 +1,16 @@
+# Scent Library CMS - Full Image Default Fix
+
+This version keeps the latest logo upload/luxury storefront features and fixes the product card image behavior.
+
+## Change
+- Product card photos show the full bottle/photo by default.
+- Removed the confusing "Full view" hover label.
+- Removed popup/overlay behavior.
+- Hover no longer changes the crop.
+- CSS cache version updated.
+
+Deploy by replacing your GitHub files, committing, and redeploying on Render.
+
 # The Scent Library CMS - Luxury Storefront Upgrade
 
 This version keeps the existing backend setup:
@@ -75,3 +88,41 @@ Product cards now keep the boutique crop in normal view, but on desktop hover a 
 
 ## No-popup hover update
 Product image hover now stays inside the product card. No large overlay/popup is opened.
+
+## Downloadable PDF catalogue added
+
+Customers can now download a live PDF catalogue from:
+
+`/catalogue.pdf`
+
+The PDF is generated from the active products in the database, so it uses the latest:
+
+- Product names
+- Prices
+- Descriptions
+- Notes
+- Occasion
+- Stock status
+- Main product photo
+- Site logo, if uploaded in Admin Settings
+
+Public links were added to the header, hero section, catalogue section and footer/newsletter area.
+
+New dependency added:
+
+```text
+reportlab==4.2.2
+Pillow==10.4.0
+```
+
+After replacing files in GitHub, redeploy on Render. The build command remains:
+
+```text
+pip install -r requirements.txt
+```
+
+Start command remains:
+
+```text
+gunicorn app:app
+```

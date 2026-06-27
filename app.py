@@ -5,6 +5,7 @@ import re
 from datetime import datetime
 from functools import wraps
 from urllib.parse import quote_plus
+from urllib.request import Request, urlopen
 
 from flask import (
     Flask, Response, abort, flash, g, redirect, render_template,
@@ -567,6 +568,223 @@ def track_whatsapp_restock(product_id):
     message = f"Hi, please tell me when {product['name']} is back in stock."
     return redirect(f"https://wa.me/{setting('whatsapp_number', '23050000000')}?text={quote_plus(message)}")
 
+
+
+@app.route("/catalogue.pdf")
+def download_catalogue():
+    """Generate a downloadable PDF catalogue from the live product database."""
+    from xml.sax.saxutils import escape
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.lib.utils import ImageReader
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image,
+        KeepTogether, PageBreak
+    )
+
+    def clean(value, default=""):
+        if value is None:
+            return default
+        return escape(str(value).strip())
+
+    def image_flowable(image_value, max_width, max_height):
+        """Return a ReportLab Image flowable, preserving aspect ratio."""
+        if not image_value:
+            return None
+        image_value = str(image_value).strip()
+        try:
+            if image_value.startswith("http://") or image_value.startswith("https://"):
+                req = Request(image_value, headers={"User-Agent": "Mozilla/5.0"})
+                image_bytes = urlopen(req, timeout=8).read()
+                image_file = io.BytesIO(image_bytes)
+            else:
+                image_file = os.path.join(app.config["UPLOAD_FOLDER"], image_value)
+                if not os.path.exists(image_file):
+                    return None
+            reader = ImageReader(image_file)
+            iw, ih = reader.getSize()
+            if not iw or not ih:
+                return None
+            scale = min(max_width / float(iw), max_height / float(ih))
+            width = iw * scale
+            height = ih * scale
+            if hasattr(image_file, "seek"):
+                image_file.seek(0)
+            img = Image(image_file, width=width, height=height)
+            img.hAlign = "CENTER"
+            return img
+        except Exception:
+            return None
+
+    products = get_db().execute(
+        """
+        SELECT * FROM products
+        WHERE is_active = 1
+        ORDER BY is_featured DESC, sort_order ASC, name ASC
+        """
+    ).fetchall()
+
+    site = setting("site_name", "The Scent Library")
+    tagline_value = setting("tagline", "Premium perfumes, inspired scents and layering combos in Mauritius.")
+    currency_value = setting("currency", "Rs")
+    whatsapp_value = setting("whatsapp_number", "23050000000")
+    instagram_value = setting("instagram_url", "")
+    address_value = setting("business_address", "Mauritius")
+    logo_value = setting("logo_url", "")
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=14 * mm,
+        leftMargin=14 * mm,
+        topMargin=16 * mm,
+        bottomMargin=16 * mm,
+        title=f"{site} Catalogue",
+        author=site,
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "CatalogueTitle", parent=styles["Title"], fontName="Helvetica-Bold",
+        fontSize=26, leading=30, textColor=colors.HexColor("#20150C"), alignment=TA_CENTER,
+        spaceAfter=6,
+    )
+    sub_style = ParagraphStyle(
+        "CatalogueSub", parent=styles["BodyText"], fontName="Helvetica",
+        fontSize=10.5, leading=15, textColor=colors.HexColor("#6B5A49"), alignment=TA_CENTER,
+        spaceAfter=16,
+    )
+    section_style = ParagraphStyle(
+        "Section", parent=styles["Heading2"], fontName="Helvetica-Bold",
+        fontSize=14, leading=18, textColor=colors.HexColor("#8A5A24"), spaceBefore=8, spaceAfter=8,
+    )
+    name_style = ParagraphStyle(
+        "ProductName", parent=styles["Heading3"], fontName="Helvetica-Bold",
+        fontSize=15, leading=18, textColor=colors.HexColor("#20150C"), spaceAfter=3,
+    )
+    meta_style = ParagraphStyle(
+        "Meta", parent=styles["BodyText"], fontName="Helvetica-Bold",
+        fontSize=8.5, leading=11, textColor=colors.HexColor("#8A5A24"), spaceAfter=5,
+    )
+    body_style = ParagraphStyle(
+        "ProductBody", parent=styles["BodyText"], fontName="Helvetica",
+        fontSize=9, leading=12.5, textColor=colors.HexColor("#55483B"), spaceAfter=4,
+    )
+    price_style = ParagraphStyle(
+        "Price", parent=styles["BodyText"], fontName="Helvetica-Bold",
+        fontSize=12, leading=14, textColor=colors.HexColor("#20150C"), spaceBefore=4,
+    )
+    small_style = ParagraphStyle(
+        "Small", parent=styles["BodyText"], fontName="Helvetica",
+        fontSize=8, leading=10.5, textColor=colors.HexColor("#7B6B5C"),
+    )
+    right_small_style = ParagraphStyle(
+        "RightSmall", parent=small_style, alignment=TA_RIGHT,
+    )
+
+    story = []
+    logo = image_flowable(logo_value, 42 * mm, 18 * mm)
+    if logo:
+        story.append(logo)
+        story.append(Spacer(1, 5 * mm))
+    story.append(Paragraph(clean(site), title_style))
+    story.append(Paragraph(clean(tagline_value), sub_style))
+
+    info_table = Table(
+        [[
+            Paragraph(f"<b>WhatsApp:</b> {clean(whatsapp_value)}<br/><b>Instagram:</b> {clean(instagram_value)}", small_style),
+            Paragraph(f"<b>Catalogue generated:</b><br/>{datetime.now().strftime('%d %b %Y')}", right_small_style),
+        ]],
+        colWidths=[95 * mm, 75 * mm],
+    )
+    info_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFF8EC")),
+        ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#E8D7BE")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    story.append(info_table)
+    story.append(Spacer(1, 7 * mm))
+    story.append(Paragraph("Perfume Catalogue", section_style))
+
+    if not products:
+        story.append(Paragraph("No active products are available in the catalogue yet.", body_style))
+    else:
+        for product in products:
+            image_cell = image_flowable(product["image_filename"], 42 * mm, 52 * mm)
+            if image_cell is None:
+                image_cell = Paragraph("No image", small_style)
+
+            stock_qty = int(product["stock_qty"] or 0)
+            stock_text = "Available" if stock_qty > 0 else "Out of stock"
+            if stock_qty > 0 and stock_qty <= int(product["low_stock_threshold"] or 2):
+                stock_text = "Low stock"
+            featured_text = "Best seller" if int(product["is_featured"] or 0) == 1 else ""
+            meta_bits = [
+                clean(product["brand"] or "The Scent Library"),
+                clean(product["category"]),
+                clean(product["size"]),
+            ]
+            if product["scent_family"]:
+                meta_bits.append(clean(product["scent_family"]))
+            if featured_text:
+                meta_bits.append(featured_text)
+
+            details = [
+                Paragraph(clean(product["name"]), name_style),
+                Paragraph(" · ".join([bit for bit in meta_bits if bit]), meta_style),
+                Paragraph(clean(product["description"] or ""), body_style),
+            ]
+            if product["notes"]:
+                details.append(Paragraph(f"<b>Notes:</b> {clean(product['notes'])}", body_style))
+            if product["occasion"]:
+                details.append(Paragraph(f"<b>Occasion:</b> {clean(product['occasion'])}", body_style))
+            details.append(Paragraph(f"{clean(currency_value)} {float(product['price'] or 0):,.0f} &nbsp;&nbsp; | &nbsp;&nbsp; {stock_text}", price_style))
+            if product["sku"]:
+                details.append(Paragraph(f"SKU: {clean(product['sku'])}", small_style))
+
+            card = Table([[image_cell, details]], colWidths=[50 * mm, 120 * mm])
+            card.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FFFCF6")),
+                ("BOX", (0, 0), (-1, -1), 0.7, colors.HexColor("#E8D7BE")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ]))
+            story.append(KeepTogether([card, Spacer(1, 5 * mm)]))
+
+    story.append(Spacer(1, 6 * mm))
+    story.append(Paragraph(
+        f"To order, send us a WhatsApp message on {clean(whatsapp_value)}. Prices and stock may change without notice.",
+        small_style,
+    ))
+
+    def page_footer(canvas, pdf_doc):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 8)
+        canvas.setFillColor(colors.HexColor("#7B6B5C"))
+        canvas.drawString(14 * mm, 9 * mm, site)
+        canvas.drawRightString(A4[0] - 14 * mm, 9 * mm, f"Page {pdf_doc.page}")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=page_footer, onLaterPages=page_footer)
+    pdf_data = buffer.getvalue()
+    buffer.close()
+    filename = f"{slugify(site)}-catalogue.pdf"
+    return Response(
+        pdf_data,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 @app.route("/sitemap.xml")
 def sitemap_xml():

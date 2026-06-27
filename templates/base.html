@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=no-popup-1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=full-image-default-1">
 {% if google_analytics_id %}
   <script async src="https://www.googletagmanager.com/gtag/js?id={{ google_analytics_id }}"></script>
   <script>
@@ -39,6 +39,7 @@
       <a href="{{ url_for('index') }}#bestsellers">Best Sellers</a>
       <a href="{{ url_for('index') }}#collections">Collections</a>
       <a href="{{ url_for('index') }}#products">Shop</a>
+      <a href="{{ url_for('download_catalogue') }}">Download Catalogue</a>
       <a href="{{ url_for('index') }}#layering">Layering</a>
       <a href="{{ url_for('index') }}#contact">Contact</a>
       <a class="admin-link" href="{{ url_for('admin_dashboard') }}">Admin</a>
@@ -69,6 +70,7 @@
     </div>
     <div class="hero-actions compact">
       <a class="btn primary" href="https://wa.me/{{ whatsapp_number }}?text={{ quote_plus('Hi, please add me to The Scent Library updates.') }}" target="_blank" rel="noopener">WhatsApp updates</a>
+      <a class="btn ghost" href="{{ url_for('download_catalogue') }}">Download catalogue</a>
       <a class="btn ghost" href="{{ instagram_url }}" target="_blank" rel="noopener">Instagram</a>
     </div>
   </section>
@@ -106,6 +108,6 @@
   <script>
     window.SL_WHATSAPP = "{{ whatsapp_number }}";
   </script>
-  <script src="{{ url_for('static', filename='js/app.js') }}?v=no-popup-1"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}?v=full-image-default-1"></script>
 </body>
 </html>
