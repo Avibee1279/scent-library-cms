@@ -42,7 +42,7 @@ ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif"}
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "CHANGE-ME-before-going-live")
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # 8MB image upload limit
+app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024  # 25MB upload limit for catalogue PDFs/images
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True, future=True)
 metadata = MetaData()
@@ -300,6 +300,115 @@ def upload_site_asset(file_storage, asset_name="site-asset"):
     return filename
 
 
+def upload_catalogue_file(file_storage):
+    """Upload final catalogue PDFs/images to Cloudinary, or local uploads in development."""
+    if not file_storage or not file_storage.filename:
+        return None
+
+    ext = file_storage.filename.rsplit(".", 1)[-1].lower() if "." in file_storage.filename else ""
+    if ext not in {"pdf", "png", "jpg", "jpeg", "webp"}:
+        raise ValueError("Catalogue must be a PDF or image file: pdf, png, jpg, jpeg or webp.")
+
+    base_id = f"catalogue-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    if USE_CLOUDINARY:
+        result = cloudinary.uploader.upload(
+            file_storage,
+            folder="scent-library/catalogues",
+            public_id=base_id,
+            overwrite=True,
+            resource_type="raw" if ext == "pdf" else "image",
+        )
+        return result.get("secure_url")
+
+    filename = secure_filename(file_storage.filename)
+    filename = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{filename}"
+    file_storage.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
+    return filename
+
+
+def catalogue_download_url(value):
+    """Return a URL for an uploaded catalogue file."""
+    if not value:
+        return ""
+    value = str(value).strip()
+    if value.startswith("http://") or value.startswith("https://"):
+        return value
+    return url_for("static", filename="uploads/" + value)
+
+
+def save_setting_value(db, key, value):
+    exists = db.execute("SELECT 1 FROM settings WHERE key = ?", (key,)).fetchone()
+    if exists:
+        db.execute("UPDATE settings SET value = ? WHERE key = ?", (value, key))
+    else:
+        db.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (key, value))
+
+
+def build_catalogue_ai_prompt(products, settings):
+    """Create a rich prompt that the admin can copy into an AI design tool."""
+    site = settings.get("site_name") or "The Scent Library"
+    currency_value = settings.get("currency") or "Rs"
+    instagram = settings.get("instagram_url") or "https://instagram.com/scentlibrary.mu"
+    whatsapp = settings.get("whatsapp_number") or ""
+    logo = settings.get("logo_url") or ""
+
+    lines = [
+        f'Create a polished luxury A4 portrait perfume catalogue for "{site}".',
+        "",
+        "Visual style:",
+        "Elegant cream and warm white background, subtle gold accents, thin decorative gold border, luxury boutique perfume aesthetic, premium serif typography, soft shadows, clean editorial layout, lots of white space. It must look like a real downloadable perfume catalogue, not a website screenshot.",
+        "",
+        "Required pages:",
+        "1. Luxury cover page with brand name, logo if supplied, and a premium hero composition.",
+        "2. Best Sellers / Most Wanted page using featured products first.",
+        "3. Product catalogue grid pages with clear product photos, prices, brand, scent family and stock status.",
+        "4. Final order/enquiry page with WhatsApp and Instagram details.",
+        "",
+        "Brand details:",
+        f"Brand: {site}",
+        f"Logo URL: {logo or 'No logo supplied'}",
+        f"Instagram: {instagram}",
+        f"WhatsApp: {whatsapp or 'WhatsApp orders available'}",
+        "Footer text: Catalogue generated from our live collection. Prices and availability are subject to change.",
+        "",
+        "Product data to include:",
+    ]
+    for i, p in enumerate(products, 1):
+        try:
+            price = float(p.get("price") or 0)
+            price_text = f"{currency_value} {price:,.0f}".replace(",", " ")
+        except Exception:
+            price_text = f"{currency_value} {p.get('price') or ''}".strip()
+        image = p.get("image_url") or p.get("image_filename") or ""
+        stock = int(p.get("stock_qty") or 0)
+        stock_text = "In stock" if stock > 0 else "Out of stock"
+        featured = "Yes" if int(p.get("is_featured") or 0) else "No"
+        lines.extend([
+            f"",
+            f"Product {i}:",
+            f"Name: {p.get('name') or ''}",
+            f"Brand: {p.get('brand') or ''}",
+            f"Category: {p.get('category') or ''}",
+            f"Size: {p.get('size') or ''}",
+            f"SKU: {p.get('sku') or ''}",
+            f"Scent family: {p.get('scent_family') or ''}",
+            f"Price: {price_text}",
+            f"Stock status: {stock_text}",
+            f"Featured / Best seller: {featured}",
+            f"Notes: {p.get('notes') or ''}",
+            f"Occasion: {p.get('occasion') or ''}",
+            f"Description: {p.get('description') or ''}",
+            f"Image URL: {image or 'No image'}",
+        ])
+
+    lines.extend([
+        "",
+        "Design instructions:",
+        "Use the product photos as real product references. Do not invent different bottles. Keep product names and prices readable. Use elegant product cards, gold dividers, refined iconography and a high-end boutique finish. If there are many products, create multiple pages rather than overcrowding a single page.",
+    ])
+    return "\n".join(lines)
+
+
 @app.context_processor
 def inject_globals():
     return {
@@ -315,6 +424,9 @@ def inject_globals():
         "logo_url": setting("logo_url", ""),
         "show_site_name_in_header": setting("show_site_name_in_header", "1"),
         "google_analytics_id": setting("google_analytics_id", ""),
+        "catalogue_mode": setting("catalogue_mode", "auto"),
+        "catalogue_uploaded_url": setting("catalogue_uploaded_url", ""),
+        "catalogue_download_url": catalogue_download_url,
         "quote_plus": quote_plus,
         "slugify": slugify,
         "image_url": image_url,
@@ -378,6 +490,10 @@ def init_db():
             "logo_url": "",
             "show_site_name_in_header": "1",
             "google_analytics_id": "",
+            "catalogue_mode": "auto",
+            "catalogue_uploaded_url": "",
+            "catalogue_uploaded_at": "",
+            "catalogue_uploaded_name": "",
         }
         for key, value in defaults.items():
             exists = conn.execute(text("SELECT 1 FROM settings WHERE key = :key"), {"key": key}).fetchone()
@@ -572,7 +688,12 @@ def track_whatsapp_restock(product_id):
 
 @app.route("/catalogue.pdf")
 def download_catalogue():
-    """Generate a luxury downloadable PDF catalogue from live CMS data."""
+    """Download uploaded luxury catalogue when enabled, otherwise generate one from live CMS data."""
+    if request.args.get("auto") != "1":
+        uploaded_catalogue = setting("catalogue_uploaded_url", "")
+        if setting("catalogue_mode", "auto") == "uploaded" and uploaded_catalogue:
+            return redirect(catalogue_download_url(uploaded_catalogue))
+
     from xml.sax.saxutils import escape
     from reportlab.pdfgen import canvas
     from reportlab.lib import colors
@@ -1363,6 +1484,60 @@ def export_backup_json():
     return Response(json.dumps(data, indent=2), mimetype="application/json", headers={"Content-Disposition": "attachment; filename=scent-library-backup.json"})
 
 
+
+
+@app.route("/admin/catalogue", methods=["GET", "POST"])
+@login_required
+def admin_catalogue():
+    db = get_db()
+
+    def all_settings():
+        return {row["key"]: row["value"] for row in db.execute("SELECT * FROM settings").fetchall()}
+
+    if request.method == "POST":
+        action = request.form.get("action", "save")
+        try:
+            if action == "upload":
+                mode = request.form.get("catalogue_mode", "uploaded")
+                catalogue_file = request.files.get("catalogue_file")
+                if catalogue_file and catalogue_file.filename:
+                    uploaded_url = upload_catalogue_file(catalogue_file)
+                    save_setting_value(db, "catalogue_uploaded_url", uploaded_url or "")
+                    save_setting_value(db, "catalogue_uploaded_name", secure_filename(catalogue_file.filename))
+                    save_setting_value(db, "catalogue_uploaded_at", now_iso())
+                    flash("Luxury catalogue uploaded. Customer download can now use this file.", "success")
+                save_setting_value(db, "catalogue_mode", "uploaded" if mode == "uploaded" else "auto")
+            elif action == "remove":
+                save_setting_value(db, "catalogue_uploaded_url", "")
+                save_setting_value(db, "catalogue_uploaded_name", "")
+                save_setting_value(db, "catalogue_uploaded_at", "")
+                save_setting_value(db, "catalogue_mode", "auto")
+                flash("Uploaded catalogue removed. Downloads will use the automatic PDF again.", "success")
+            else:
+                save_setting_value(db, "catalogue_mode", request.form.get("catalogue_mode", "auto"))
+                flash("Catalogue settings saved.", "success")
+            db.commit()
+        except ValueError as exc:
+            db.rollback()
+            flash(str(exc), "error")
+        return redirect(url_for("admin_catalogue"))
+
+    products = db.execute("SELECT * FROM products WHERE is_active = 1 ORDER BY is_featured DESC, sort_order ASC, name ASC").fetchall()
+    rows = []
+    for row in products:
+        d = dict(row)
+        img = d.get("image_filename") or ""
+        if img:
+            if img.startswith("http://") or img.startswith("https://"):
+                d["image_url"] = img
+            else:
+                d["image_url"] = request.host_url.rstrip("/") + url_for("static", filename="uploads/" + img)
+        else:
+            d["image_url"] = ""
+        rows.append(d)
+    settings = all_settings()
+    prompt = build_catalogue_ai_prompt(rows, settings)
+    return render_template("admin/catalogue.html", settings=settings, products=rows, prompt=prompt)
 
 
 @app.route("/admin/orders", methods=["GET", "POST"])

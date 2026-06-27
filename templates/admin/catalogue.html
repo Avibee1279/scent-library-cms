@@ -1,0 +1,96 @@
+{% extends "admin/base_admin.html" %}
+{% block content %}
+<div class="admin-header">
+  <div>
+    <h1>Catalogue manager</h1>
+    <p>Generate an AI design prompt from your live products, upload the final luxury catalogue, and choose what customers download.</p>
+  </div>
+  <div class="actions">
+    <a class="button ghost" href="{{ url_for('download_catalogue', auto=1) }}" target="_blank">Preview auto PDF</a>
+    <a class="button" href="{{ url_for('download_catalogue') }}" target="_blank">Customer download link</a>
+  </div>
+</div>
+
+<section class="admin-card">
+  <h2>Customer download mode</h2>
+  <p class="muted">Choose whether customers download the always-fresh automatic PDF, or your uploaded luxury catalogue.</p>
+  <form method="post" enctype="multipart/form-data" class="form-grid">
+    <input type="hidden" name="action" value="upload">
+    <label class="check wide">
+      <input type="radio" name="catalogue_mode" value="auto" {% if settings.get('catalogue_mode','auto') != 'uploaded' %}checked{% endif %}>
+      Use automatic generated PDF from live CMS data
+    </label>
+    <label class="check wide">
+      <input type="radio" name="catalogue_mode" value="uploaded" {% if settings.get('catalogue_mode','auto') == 'uploaded' %}checked{% endif %}>
+      Use uploaded luxury catalogue file
+    </label>
+    <label class="wide">Upload final luxury catalogue
+      <input type="file" name="catalogue_file" accept="application/pdf,image/png,image/jpeg,image/webp">
+    </label>
+    <p class="muted wide">Accepted: PDF, PNG, JPG, WEBP. Best option: upload a final PDF catalogue. It will be stored in Cloudinary when configured.</p>
+    <div class="wide"><button class="button" type="submit">Save catalogue settings</button></div>
+  </form>
+
+  {% if settings.get('catalogue_uploaded_url') %}
+    <div class="current-image catalogue-current">
+      <div>
+        <strong>Uploaded catalogue active file</strong>
+        <small>{{ settings.get('catalogue_uploaded_name','Catalogue file') }} · Uploaded {{ settings.get('catalogue_uploaded_at','') }}</small>
+        <p><a class="button ghost" href="{{ catalogue_download_url(settings.get('catalogue_uploaded_url')) }}" target="_blank">Open uploaded catalogue</a></p>
+      </div>
+      <form method="post" onsubmit="return confirm('Remove uploaded catalogue and go back to automatic PDF?')">
+        <input type="hidden" name="action" value="remove">
+        <button class="button danger" type="submit">Remove uploaded catalogue</button>
+      </form>
+    </div>
+  {% else %}
+    <p class="muted">No uploaded luxury catalogue yet. Customers will receive the automatic PDF unless you upload one and select uploaded mode.</p>
+  {% endif %}
+</section>
+
+<section class="admin-card">
+  <div class="admin-header compact-header">
+    <div>
+      <h2>AI catalogue prompt</h2>
+      <p>This prompt is generated from your live products, prices, stock, notes and Cloudinary image links.</p>
+    </div>
+    <button class="button" type="button" onclick="copyCataloguePrompt()">Copy prompt</button>
+  </div>
+  <textarea id="cataloguePrompt" class="prompt-box" readonly rows="22">{{ prompt }}</textarea>
+  <p class="muted">Use this prompt in ChatGPT/image generation/design tools, create the beautiful catalogue, then upload the final PDF above.</p>
+</section>
+
+<section class="admin-card">
+  <h2>Products included in prompt</h2>
+  <table class="admin-table">
+    <thead><tr><th>Product</th><th>Brand</th><th>Price</th><th>Stock</th><th>Image</th></tr></thead>
+    <tbody>
+      {% for p in products %}
+        <tr>
+          <td><strong>{{ p.name }}</strong><br><small>{{ p.scent_family or p.category }}</small></td>
+          <td>{{ p.brand or '-' }}</td>
+          <td>{{ settings.get('currency','Rs') }} {{ '%.0f'|format(p.price or 0) }}</td>
+          <td>{{ p.stock_qty or 0 }}</td>
+          <td>{% if p.image_url %}<a href="{{ p.image_url }}" target="_blank">Open image</a>{% else %}<span class="muted">No image</span>{% endif %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5">No active products found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<script>
+function copyCataloguePrompt(){
+  const box = document.getElementById('cataloguePrompt');
+  box.select();
+  box.setSelectionRange(0, 999999);
+  navigator.clipboard.writeText(box.value).then(() => {
+    alert('Catalogue prompt copied.');
+  }).catch(() => {
+    document.execCommand('copy');
+    alert('Catalogue prompt copied.');
+  });
+}
+</script>
+{% endblock %}
